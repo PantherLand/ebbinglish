@@ -73,6 +73,8 @@ model Word {
   text      String
   language  String   @default("en")
   note      String?
+  isPriority     Boolean @default(false)
+  manualCategory String?
 
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   reviewState ReviewState?
@@ -95,6 +97,7 @@ model ReviewState {
   dueAt         DateTime
   lastReviewedAt DateTime?
   lapseCount    Int      @default(0)
+  seenCount     Int      @default(0)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   word Word @relation(fields: [wordId], references: [id], onDelete: Cascade)
@@ -112,6 +115,7 @@ model ReviewLog {
 
   // 2 = know, 1 = fuzzy, 0 = don’t know
   grade     Int
+  revealedAnswer Boolean @default(false)
   msSpent   Int?
 
   reviewedAt DateTime @default(now())

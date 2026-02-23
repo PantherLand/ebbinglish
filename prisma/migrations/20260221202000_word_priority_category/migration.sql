@@ -1,0 +1,3 @@
+ALTER TABLE "Word"
+ADD COLUMN "isPriority" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "manualCategory" TEXT;

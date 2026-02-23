@@ -1,0 +1,5 @@
+ALTER TABLE "ReviewState"
+ADD COLUMN "seenCount" INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE "ReviewLog"
+ADD COLUMN "revealedAnswer" BOOLEAN NOT NULL DEFAULT false;

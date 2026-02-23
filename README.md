@@ -31,6 +31,9 @@ NEXTAUTH_SECRET="<random-32+>"
 NEXTAUTH_URL="http://localhost:3000"
 GOOGLE_CLIENT_ID="..."
 GOOGLE_CLIENT_SECRET="..."
+DICT_BACK_API="http://localhost:8787/v1"
+DICT_BACK_API_DICT_ID="oxford-1"
+# DICT_BACK_API_KEY="..."
 ```
 
 Generate a secret:
