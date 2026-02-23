@@ -63,11 +63,7 @@ export default function ReviewSetupModal({
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Review setup</div>
-            <h2 className="text-2xl font-semibold text-slate-900">Session profile</h2>
-            <p className="text-sm text-slate-600">
-              Tune source and count before starting the current batch.
-            </p>
+            <h2 className="text-xl font-semibold text-slate-900">This session</h2>
           </div>
           <button
             aria-label="Edit review setup"
@@ -107,10 +103,6 @@ export default function ReviewSetupModal({
           </div>
         </div>
 
-        <p className="text-xs text-slate-500">
-          Selected: {SOURCE_LABEL[selectedSource]} • {selectedCards} / {sourceTotal} cards
-        </p>
-
         <div className="flex flex-wrap items-center gap-3">
           <div className="text-xs text-slate-500">
             Round {selectedRound + 1} / {totalRounds}
@@ -124,7 +116,7 @@ export default function ReviewSetupModal({
             }`}
             href={nextSessionHref}
           >
-            Refresh to next session
+            Next round
           </Link>
         </div>
       </div>

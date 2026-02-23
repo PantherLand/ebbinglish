@@ -19,16 +19,25 @@ function normalizeCategory(value: string): string {
   return value.trim().toLowerCase();
 }
 
+const PAGE_SIZE = 20;
+
+function parsePage(value?: string): number {
+  const parsed = Number.parseInt(value ?? "1", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
 type LibraryPageProps = {
   searchParams: Promise<{
     priority?: string;
     tag?: string;
+    page?: string;
   }>;
 };
 
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
-  const { priority, tag } = await searchParams;
+  const { priority, tag, page } = await searchParams;
   const selectedPriority = parsePriorityFilter(priority);
+  const currentPage = parsePage(page);
   const session = await auth();
   const email = session?.user?.email;
 
@@ -46,7 +55,6 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
     select: {
       words: {
         orderBy: { createdAt: "desc" },
-        take: 100,
       },
     },
   });
@@ -96,14 +104,25 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
     return normalizeCategory(category ?? "") === selectedTag;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredWords.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageWords = filteredWords.slice(pageStart, pageStart + PAGE_SIZE);
+
   const buildFilterHref = (nextPriority: PriorityFilter, nextTag: TagFilter) => {
     const params = new URLSearchParams();
-    if (nextPriority !== "all") {
-      params.set("priority", nextPriority);
-    }
-    if (nextTag !== "all") {
-      params.set("tag", nextTag);
-    }
+    if (nextPriority !== "all") params.set("priority", nextPriority);
+    if (nextTag !== "all") params.set("tag", nextTag);
+    // Reset to page 1 when filter changes
+    const query = params.toString();
+    return query ? `/app/library?${query}` : "/app/library";
+  };
+
+  const buildPageHref = (p: number) => {
+    const params = new URLSearchParams();
+    if (selectedPriority !== "all") params.set("priority", selectedPriority);
+    if (selectedTag !== "all") params.set("tag", selectedTag);
+    if (p > 1) params.set("page", String(p));
     const query = params.toString();
     return query ? `/app/library?${query}` : "/app/library";
   };
@@ -123,7 +142,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">Your cards</h2>
           <span className="text-sm text-gray-600">
-            {filteredWords.length} shown / {words.length} total
+            {filteredWords.length} / {words.length} words
           </span>
         </div>
 
@@ -190,8 +209,9 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
             No cards match current filters.
           </p>
         ) : (
+          <>
           <ul className="divide-y">
-            {filteredWords.map((word) => (
+            {pageWords.map((word) => (
               <li key={word.id} className="py-3">
                 <div className="flex items-baseline justify-between gap-3">
                   <div className="space-y-1">
@@ -262,6 +282,65 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               </li>
             ))}
           </ul>
+
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-between gap-2 border-t border-slate-200 pt-3">
+              <span className="text-xs text-slate-500">
+                Page {safePage} / {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <Link
+                  aria-disabled={safePage <= 1}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                    safePage <= 1
+                      ? "pointer-events-none border-slate-200 text-slate-300"
+                      : "border-slate-300 text-slate-700 hover:bg-slate-100"
+                  }`}
+                  href={buildPageHref(safePage - 1)}
+                >
+                  Prev
+                </Link>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+                  .reduce<(number | "…")[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("…");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((item, idx) =>
+                    item === "…" ? (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-xs text-slate-400">
+                        …
+                      </span>
+                    ) : (
+                      <Link
+                        key={item}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                          item === safePage
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-300 text-slate-700 hover:bg-slate-100"
+                        }`}
+                        href={buildPageHref(item)}
+                      >
+                        {item}
+                      </Link>
+                    ),
+                  )}
+                <Link
+                  aria-disabled={safePage >= totalPages}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                    safePage >= totalPages
+                      ? "pointer-events-none border-slate-200 text-slate-300"
+                      : "border-slate-300 text-slate-700 hover:bg-slate-100"
+                  }`}
+                  href={buildPageHref(safePage + 1)}
+                >
+                  Next
+                </Link>
+              </div>
+            </div>
+          ) : null}
+          </>
         )}
       </section>
     </div>

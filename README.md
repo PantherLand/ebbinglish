@@ -33,6 +33,9 @@ GOOGLE_CLIENT_ID="..."
 GOOGLE_CLIENT_SECRET="..."
 DICT_BACK_API="http://localhost:8787/v1"
 DICT_BACK_API_DICT_ID="oxford-1"
+OPENAI_API_KEY="sk-..."
+# OPENAI_MODEL="gpt-4o-mini"
+# OPENAI_BASE_URL="https://api.openai.com"
 # DICT_BACK_API_KEY="..."
 ```
 

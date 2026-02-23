@@ -55,10 +55,12 @@ export default function AddWordForm() {
   const [checkingAdded, setCheckingAdded] = useState(false);
   const [inputCommitted, setInputCommitted] = useState(false);
   const [manualMeaningMode, setManualMeaningMode] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
 
   useEffect(() => {
     if (state.status === "success") {
       formRef.current?.reset();
+      setJustAdded(true);
       setText("");
       setNote("");
       setSelectedHeadword("");
@@ -152,6 +154,7 @@ export default function AddWordForm() {
 
   const handleWordInput = (value: string) => {
     setText(value);
+    setJustAdded(false);
     setSelectedHeadword("");
     setNote("");
     setEntryDetail(null);
@@ -223,6 +226,7 @@ export default function AddWordForm() {
     }
 
     setFillingMeaning(true);
+    setJustAdded(false);
     setDictError(null);
     setMeaningHint(null);
     setManualMeaningMode(false);
@@ -321,6 +325,7 @@ export default function AddWordForm() {
     !pending &&
     !fillingMeaning &&
     !alreadyAdded &&
+    !justAdded &&
     (dictDisabled || Boolean(selectedHeadword));
 
   return (
@@ -435,7 +440,7 @@ export default function AddWordForm() {
         disabled={!canSubmit}
         type="submit"
       >
-        {pending ? "Adding..." : alreadyAdded ? "已加入" : "加入背诵 cards"}
+        {pending ? "Adding..." : alreadyAdded || justAdded ? "已加入" : "加入背诵 cards"}
       </button>
 
       {state.status !== "idle" ? (

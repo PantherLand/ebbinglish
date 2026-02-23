@@ -1,9 +1,9 @@
+import Link from "next/link";
 import LearningDayHero from "@/app/components/learning-day-hero";
 import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
 import { STAGE_INTERVAL_DAYS } from "@/src/review-scheduler";
 import ReviewSetupModal from "./review-setup-modal";
-import ReviewSession from "./review-session";
 
 type DueCard = {
   id: string;
@@ -285,15 +285,6 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const roundStartIndex = currentRound * selectedCount;
   const selectedCards = sourcePool.slice(roundStartIndex, roundStartIndex + selectedCount);
   const hasNextRound = currentRound < maxRoundIndex;
-  const cards = selectedCards.map((card) => ({
-    id: card.id,
-    text: card.text,
-    language: card.language,
-    meaning: card.meaning,
-    stage: card.stage,
-    seenCount: card.seenCount,
-    isPriority: card.isPriority,
-  }));
   const buildRoundHref = (roundIndex: number): string => {
     const safeRound = clamp(roundIndex, 0, maxRoundIndex);
     const params = new URLSearchParams();
@@ -304,13 +295,16 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
     }
     return `/app/today?${params.toString()}`;
   };
-  const currentRoundHref = buildRoundHref(currentRound);
+  const sessionParams = new URLSearchParams();
+  sessionParams.set("source", selectedSource);
+  sessionParams.set("count", String(selectedCount));
+  if (currentRound !== 0) {
+    sessionParams.set("round", String(currentRound));
+  }
+  const sessionHref = `/app/today/session?${sessionParams.toString()}`;
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">Today</h1>
-      </div>
 
       <LearningDayHero
         dayNumber={studyDayNumber}
@@ -321,7 +315,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border p-3">
-          <div className="text-sm text-gray-600">Rounds Today</div>
+          <div className="text-sm text-gray-600">Reviews Today</div>
           <div className="text-xl font-semibold">{reviewedToday}</div>
         </div>
         <div className="rounded-lg border p-3">
@@ -338,38 +332,44 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         </div>
       </div>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <section className="rounded-3xl border border-slate-200 bg-white p-4">
-          <ReviewSetupModal
-            selectedCards={selectedCards.length}
-            selectedCount={selectedCount}
-            selectedRound={currentRound}
-            selectedSource={selectedSource}
-            totalRounds={totalRounds}
-            nextSessionHref={buildRoundHref(Math.min(currentRound + 1, maxRoundIndex))}
-            hasNextRound={hasNextRound}
-            sourceTotal={sourceTotal}
-            totalBySource={{
-              all: allCards.length,
-              priority: priorityCards.length,
-              new: newOnlyCards.length,
-              review: reviewOnlyCards.length,
-            }}
-          />
-        </section>
+      <section className="rounded-3xl border border-slate-200 bg-white p-4">
+        <ReviewSetupModal
+          selectedCards={selectedCards.length}
+          selectedCount={selectedCount}
+          selectedRound={currentRound}
+          selectedSource={selectedSource}
+          totalRounds={totalRounds}
+          nextSessionHref={buildRoundHref(Math.min(currentRound + 1, maxRoundIndex))}
+          hasNextRound={hasNextRound}
+          sourceTotal={sourceTotal}
+          totalBySource={{
+            all: allCards.length,
+            priority: priorityCards.length,
+            new: newOnlyCards.length,
+            review: reviewOnlyCards.length,
+          }}
+        />
+      </section>
 
-        <section className="space-y-2" id="study-session">
+      <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 p-5 shadow-sm">
+        <div className="space-y-1">
           <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Study session</div>
           <h2 className="text-xl font-semibold text-slate-900">
             Round {currentRound + 1} / {totalRounds}
           </h2>
-          <ReviewSession
-            backHref={currentRoundHref}
-            cards={cards}
-            roundLabel={`Round ${currentRound + 1} / ${totalRounds}`}
-          />
-        </section>
-      </div>
+          <p className="text-sm text-slate-600">
+            {selectedCards.length} cards ready in this round.
+          </p>
+        </div>
+        <div className="mt-4">
+          <Link
+            className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-lg font-semibold text-white transition hover:bg-slate-800 active:scale-95"
+            href={sessionHref}
+          >
+            Start session
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }
