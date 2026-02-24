@@ -69,6 +69,8 @@ export type DictEntryDetail = {
   meaning: string | null;
   pos: string | null;
   pronunciations: string[];
+  /** Audio URLs (mp3/ogg) if available, primarily from dictionaryapi.dev phonetics[].audio */
+  audioUrls: string[];
   posBlocks: DictEntryPosBlock[];
   senses: DictEntrySense[];
   idioms: DictEntryIdiom[];
@@ -520,6 +522,7 @@ function emptyEntryDetail(headword: string): DictEntryDetail {
     meaning: null,
     pos: null,
     pronunciations: [],
+    audioUrls: [],
     posBlocks: [],
     senses: [],
     idioms: [],
@@ -549,6 +552,7 @@ function parseDictionaryApiDevContent(content: unknown): {
   headword: string | null;
   pos: string | null;
   pronunciations: string[];
+  audioUrls: string[];
   posBlocks: DictEntryPosBlock[];
   senses: DictEntrySense[];
   fallbackText: string | null;
@@ -568,6 +572,7 @@ function parseDictionaryApiDevContent(content: unknown): {
 
   const pronunciationSet = new Set<string>();
   const posBlocks: DictEntryPosBlock[] = [];
+  const audioUrlSet = new Set<string>();
   let resolvedHeadword: string | null = null;
 
   const addPronunciation = (value: string | null) => {
@@ -575,6 +580,17 @@ function parseDictionaryApiDevContent(content: unknown): {
     if (normalized) {
       pronunciationSet.add(normalized);
     }
+  };
+
+  const addAudioUrl = (value: string | null) => {
+    const url = asString(value);
+    if (!url) {
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return;
+    }
+    audioUrlSet.add(url);
   };
 
   for (const entry of entries) {
@@ -591,7 +607,8 @@ function parseDictionaryApiDevContent(content: unknown): {
           continue;
         }
         addPronunciation(asString(record.text));
-        if (pronunciationSet.size >= 4) {
+        addAudioUrl(asString(record.audio));
+        if (pronunciationSet.size >= 4 && audioUrlSet.size >= 3) {
           break;
         }
       }
@@ -677,6 +694,7 @@ function parseDictionaryApiDevContent(content: unknown): {
     headword: resolvedHeadword,
     pos,
     pronunciations,
+    audioUrls: [...audioUrlSet].slice(0, 3),
     posBlocks,
     senses,
     fallbackText,
@@ -700,6 +718,7 @@ function parseEntryPayload(headword: string, payload: DictEntryResponse): DictEn
       ),
       pos: parsedDictionaryApiContent.pos,
       pronunciations: parsedDictionaryApiContent.pronunciations,
+      audioUrls: parsedDictionaryApiContent.audioUrls,
       posBlocks: parsedDictionaryApiContent.posBlocks,
       senses: parsedDictionaryApiContent.senses,
       idioms: [],
@@ -719,6 +738,7 @@ function parseEntryPayload(headword: string, payload: DictEntryResponse): DictEn
       meaning: toSafeText(fallbackText, 500),
       pos: null,
       pronunciations: [],
+      audioUrls: [],
       posBlocks: [],
       senses: [],
       idioms: [],
@@ -738,6 +758,7 @@ function parseEntryPayload(headword: string, payload: DictEntryResponse): DictEn
     ),
     pos: parsed.pos,
     pronunciations: parsed.pronunciations,
+    audioUrls: [],
     posBlocks: parsed.posBlocks,
     senses: parsed.senses,
     idioms: parsed.idioms,

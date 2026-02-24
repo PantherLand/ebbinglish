@@ -36,6 +36,7 @@ type SessionResult = {
 type DictCardInfo = {
   meaning: string | null;
   pronunciations: string[];
+  audioUrls: string[];
 };
 
 type PracticeReading = {
@@ -257,42 +258,77 @@ export default function ReviewSession({
   const currentStoredMeaning = current?.meaning?.trim() || null;
   const currentDictInfo = current ? dictInfoByCardId[current.id] : null;
   const currentPronunciations = currentDictInfo?.pronunciations ?? [];
+  const currentAudioUrls = currentDictInfo?.audioUrls ?? [];
   const currentHeadword = current?.text.trim() || "";
   const cardsSignature = useMemo(() => activeCards.map((card) => card.id).join("|"), [activeCards]);
   const serverCardsSignature = useMemo(() => cards.map((card) => card.id).join("|"), [cards]);
   const lastRoundStorageKey = progressStorageKey ? `${progressStorageKey}:last-round` : null;
   const isReplaySession = replayCards !== null && cards.length === 0;
 
-  // Auto-pronounce each new card when the session is active.
-  useEffect(() => {
-    if (!started || !current || typeof window === "undefined" || !window.speechSynthesis) {
-      setSpeaking(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  function stopAudio() {
+    const audio = audioRef.current;
+    if (!audio) {
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(current.text);
-    utterance.lang = langToLocale(current.language);
-    utterance.rate = 0.9;
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // ignore
+    }
+  }
+
+  async function playAudio(url: string) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    stopAudio();
+
+    try {
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onplay = () => setSpeaking(true);
+      audio.onended = () => setSpeaking(false);
+      audio.onerror = () => setSpeaking(false);
+      // Some browsers require a user gesture for play(); if blocked, we'll just stay silent.
+      await audio.play();
+    } catch {
+      setSpeaking(false);
+    }
+  }
+
+  // Auto-play pronunciation audio (dictionaryapi.dev) when the session is active.
+  useEffect(() => {
+    if (!started || !current) {
+      setSpeaking(false);
+      stopAudio();
+      return;
+    }
+
+    const url = currentAudioUrls[0];
+    if (!url) {
+      setSpeaking(false);
+      stopAudio();
+      return;
+    }
+
+    void playAudio(url);
+
     return () => {
-      window.speechSynthesis.cancel();
+      stopAudio();
       setSpeaking(false);
     };
-  }, [current?.id, started]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current?.id, started, currentAudioUrls.join("|")]);
 
   function speakCurrent() {
-    if (!current || typeof window === "undefined" || !window.speechSynthesis) return;
-    const utterance = new SpeechSynthesisUtterance(current.text);
-    utterance.lang = langToLocale(current.language);
-    utterance.rate = 0.9;
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    const url = currentAudioUrls[0];
+    if (!url) {
+      return;
+    }
+    void playAudio(url);
   }
 
   useEffect(() => {
@@ -537,6 +573,7 @@ export default function ReviewSession({
           meaning?: string | null;
           fallbackText?: string | null;
           pronunciations?: string[];
+          audioUrls?: string[];
         };
 
         if (!response.ok) {
@@ -548,18 +585,23 @@ export default function ReviewSession({
           .map((item) => item.trim())
           .filter((item) => item.length > 0)
           .slice(0, 3);
+        const audioUrls = (payload.audioUrls ?? [])
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0)
+          .slice(0, 3);
         setDictInfoByCardId((prev) => ({
           ...prev,
           [current.id]: {
             meaning: value,
             pronunciations,
+            audioUrls,
           },
         }));
       } catch {
         if (!controller.signal.aborted) {
           setDictInfoByCardId((prev) => ({
             ...prev,
-            [current.id]: { meaning: null, pronunciations: [] },
+            [current.id]: { meaning: null, pronunciations: [], audioUrls: [] },
           }));
         }
       } finally {
