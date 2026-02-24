@@ -326,6 +326,7 @@ export default function ReviewSession({
   function speakCurrent() {
     const url = currentAudioUrls[0];
     if (!url) {
+      setSpeaking(false);
       return;
     }
     void playAudio(url);

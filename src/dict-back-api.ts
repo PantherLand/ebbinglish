@@ -583,9 +583,13 @@ function parseDictionaryApiDevContent(content: unknown): {
   };
 
   const addAudioUrl = (value: string | null) => {
-    const url = asString(value);
+    let url = asString(value);
     if (!url) {
       return;
+    }
+    // dictionaryapi.dev sometimes returns URLs like "//...".
+    if (url.startsWith("//")) {
+      url = `https:${url}`;
     }
     if (!/^https?:\/\//i.test(url)) {
       return;
@@ -913,6 +917,26 @@ export async function lookupEntryDetail(headword: string): Promise<DictEntryDeta
   }
 
   if (primaryDetail && (!canFallback || hasMeaningfulEntry(primaryDetail))) {
+    // Even when primary dict has meaning (e.g. Oxford), it may not provide audio.
+    // Best-effort: fetch dictionaryapi.dev and merge audioUrls.
+    if (canFallback && (primaryDetail.audioUrls?.length ?? 0) === 0) {
+      try {
+        const fallbackDetail = await lookupEntryDetailByDict(
+          config,
+          headword,
+          FALLBACK_DICT_ID,
+        );
+        if (fallbackDetail.audioUrls.length > 0) {
+          return {
+            ...primaryDetail,
+            audioUrls: fallbackDetail.audioUrls,
+          };
+        }
+      } catch {
+        // ignore audio fallback errors
+      }
+    }
+
     return primaryDetail;
   }
 
