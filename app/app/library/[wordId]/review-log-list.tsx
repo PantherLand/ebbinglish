@@ -32,9 +32,6 @@ export function ReviewLogList({ logs }: ReviewLogListProps) {
               <div className="text-gray-700">{formatDateTime(log.reviewedAt)}</div>
               <div className="flex items-center gap-2">
                 <span className="rounded border px-2 py-0.5 text-xs">{formatGrade(log.grade)}</span>
-                <span className="rounded border px-2 py-0.5 text-xs text-gray-600">
-                  {log.revealedAnswer ? "Revealed" : "Skipped reveal"}
-                </span>
               </div>
             </li>
           ))}

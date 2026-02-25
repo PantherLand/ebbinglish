@@ -8,7 +8,6 @@ import { lookupEntryDetail } from "@/src/dict-back-api";
 import { buildHeatmap } from "@/src/memory-heatmap";
 import { getMemoryRating } from "@/src/memory-rating";
 import { prisma } from "@/src/prisma";
-import { STAGE_INTERVAL_DAYS } from "@/src/review-scheduler";
 import StudyConfigForm from "./study-config-form";
 import { EbbinghausProgress } from "./ebbinghaus-progress";
 import { MemoryRatingCard } from "./memory-rating-card";
@@ -21,22 +20,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 type WordDetailPageProps = {
   params: Promise<{ wordId: string }>;
 };
-
-function formatRelativeDue(dueAt: Date, now: Date): string {
-  const diffMs = dueAt.getTime() - now.getTime();
-  const absMs = Math.abs(diffMs);
-  const absMinutes = Math.floor(absMs / (60 * 1000));
-  const absHours = Math.floor(absMs / (60 * 60 * 1000));
-  const absDays = Math.floor(absMs / (24 * 60 * 60 * 1000));
-
-  if (absMinutes < 60) {
-    return diffMs >= 0 ? `in ${absMinutes}m` : `${absMinutes}m overdue`;
-  }
-  if (absHours < 24) {
-    return diffMs >= 0 ? `in ${absHours}h` : `${absHours}h overdue`;
-  }
-  return diffMs >= 0 ? `in ${absDays}d` : `${absDays}d overdue`;
-}
 
 export default async function WordDetailPage({ params }: WordDetailPageProps) {
   const { wordId } = await params;
@@ -54,7 +37,7 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true },
+    select: { id: true, currentGlobalRound: true },
   });
 
   if (!user) {
@@ -69,7 +52,22 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
   const word = await prisma.word.findFirst({
     where: { id: wordId, userId: user.id },
     include: {
-      reviewState: true,
+      reviewState: {
+        select: {
+          id: true,
+          userId: true,
+          wordId: true,
+          lastReviewedAt: true,
+          lapseCount: true,
+          seenCount: true,
+          consecutivePerfect: true,
+          freezeRounds: true,
+          isMastered: true,
+          masteryPhase: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
       reviewLog: {
         orderBy: { reviewedAt: "desc" },
         take: 365,
@@ -82,8 +80,10 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
   }
 
   const rating = getMemoryRating({
-    stage: word.reviewState?.stage ?? 0,
-    dueAt: word.reviewState?.dueAt ?? null,
+    consecutivePerfect: word.reviewState?.consecutivePerfect ?? 0,
+    freezeRounds: word.reviewState?.freezeRounds ?? 0,
+    isMastered: word.reviewState?.isMastered ?? false,
+    masteryPhase: word.reviewState?.masteryPhase ?? 0,
     lapseCount: word.reviewState?.lapseCount ?? 0,
     seenCount: word.reviewState?.seenCount ?? 0,
     logs: word.reviewLog.map((log) => ({ grade: log.grade, reviewedAt: log.reviewedAt })),
@@ -97,18 +97,13 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
   const successRate = totalReviews === 0 ? 0 : Math.round((knowTimes / totalReviews) * 100);
 
   const now = new Date();
-  const maxStage = STAGE_INTERVAL_DAYS.length - 1;
-  const currentStageRaw = word.reviewState?.stage ?? 0;
-  const currentStage = Math.max(0, Math.min(currentStageRaw, maxStage));
-  const nextStage = Math.min(currentStage + 1, maxStage);
-  const stageProgress = Math.round((currentStage / maxStage) * 100);
-  const currentIntervalDays = STAGE_INTERVAL_DAYS[currentStage];
-  const nextIntervalDays = STAGE_INTERVAL_DAYS[nextStage];
-  const dueAt = word.reviewState?.dueAt ?? null;
-  const dueRelative = dueAt ? formatRelativeDue(dueAt, now) : "Not scheduled";
   const lastReviewedAt = word.reviewLog[0]?.reviewedAt ?? word.createdAt;
   const daysSinceReview = Math.max(0, (now.getTime() - lastReviewedAt.getTime()) / MS_PER_DAY);
   const lapseCount = word.reviewState?.lapseCount ?? 0;
+  const consecutivePerfect = word.reviewState?.consecutivePerfect ?? 0;
+  const freezeRounds = word.reviewState?.freezeRounds ?? 0;
+  const masteryPhase = word.reviewState?.masteryPhase ?? 0;
+  const isMastered = word.reviewState?.isMastered ?? false;
 
   const manualNote = word.note?.trim() || null;
   let hasDictMeaning = false;
@@ -119,6 +114,7 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
     meaning: manualNote,
     pos: null,
     pronunciations: [],
+    audioUrls: [],
     posBlocks: [],
     senses: [],
     idioms: [],
@@ -141,6 +137,7 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
         meaning: detail.meaning,
         pos: detail.pos,
         pronunciations: detail.pronunciations,
+        audioUrls: detail.audioUrls,
         posBlocks: detail.posBlocks,
         senses: detail.senses,
         idioms: detail.idioms,
@@ -178,7 +175,6 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <WordHeatmap weeks={heatmapWeeks} />
 
           <section className="space-y-3 rounded-lg border p-4">
             <h2 className="text-base font-semibold">Meanings</h2>
@@ -208,6 +204,8 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
             )}
           </section>
 
+          <WordHeatmap weeks={heatmapWeeks} />
+
           <ReviewLogList logs={word.reviewLog} />
         </div>
 
@@ -218,33 +216,33 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
             wordId={word.id}
           />
           <EbbinghausProgress
-            currentStage={currentStage}
-            maxStage={maxStage}
-            stageProgress={stageProgress}
-            currentIntervalDays={currentIntervalDays}
-            nextIntervalDays={nextIntervalDays}
-            dueAt={dueAt}
-            dueRelative={dueRelative}
-            stageIntervalDays={STAGE_INTERVAL_DAYS}
+            consecutivePerfect={consecutivePerfect}
+            currentGlobalRound={user.currentGlobalRound}
+            freezeRounds={freezeRounds}
+            isMastered={isMastered}
+            masteryPhase={masteryPhase}
           />
           <RetentionCurveChart
+            consecutivePerfect={consecutivePerfect}
             daysSinceReview={daysSinceReview}
-            currentIntervalDays={currentIntervalDays}
-            nextIntervalDays={nextIntervalDays}
-            successRate={successRate}
+            freezeRounds={freezeRounds}
+            isMastered={isMastered}
             lapseCount={lapseCount}
-            dueAt={dueAt}
-            lastReviewedAt={lastReviewedAt}
+            masteryPhase={masteryPhase}
+            successRate={successRate}
           />
           <MemoryRatingCard
+            consecutivePerfect={consecutivePerfect}
+            freezeRounds={freezeRounds}
+            isMastered={isMastered}
             level={rating.level}
-            score={rating.score}
-            summary={rating.summary}
-            totalReviews={totalReviews}
-            successRate={successRate}
+            masteryPhase={masteryPhase}
             revealTimes={revealTimes}
+            score={rating.score}
             seenCount={word.reviewState?.seenCount ?? 0}
-            currentStage={currentStage}
+            summary={rating.summary}
+            successRate={successRate}
+            totalReviews={totalReviews}
           />
         </div>
       </div>

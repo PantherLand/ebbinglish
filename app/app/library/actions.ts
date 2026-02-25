@@ -80,7 +80,6 @@ export async function createWordAction(
         reviewState: {
           create: {
             userId: user.id,
-            dueAt: new Date(),
           },
         },
       },
@@ -110,12 +109,14 @@ export async function togglePriorityFromListAction(formData: FormData): Promise<
   });
 
   if (!parsed.success) {
+    console.error("[togglePriorityFromListAction] Invalid input:", parsed.error.flatten());
     return;
   }
 
   const session = await auth();
   const email = session?.user?.email;
   if (!email) {
+    console.error("[togglePriorityFromListAction] Not authenticated");
     return;
   }
 
@@ -124,6 +125,7 @@ export async function togglePriorityFromListAction(formData: FormData): Promise<
     select: { id: true },
   });
   if (!user) {
+    console.error("[togglePriorityFromListAction] User not found:", email);
     return;
   }
 
@@ -135,17 +137,21 @@ export async function togglePriorityFromListAction(formData: FormData): Promise<
     select: { id: true },
   });
   if (!word) {
+    console.error("[togglePriorityFromListAction] Word not found or not owned:", parsed.data.wordId);
     return;
   }
 
-  await prisma.word.update({
-    where: { id: word.id },
-    data: { isPriority: parsed.data.nextPriority === "true" },
-  });
-
-  revalidatePath("/app/library");
-  revalidatePath(`/app/library/${word.id}`);
-  revalidatePath("/app/today");
+  try {
+    await prisma.word.update({
+      where: { id: word.id },
+      data: { isPriority: parsed.data.nextPriority === "true" },
+    });
+    revalidatePath("/app/library");
+    revalidatePath(`/app/library/${word.id}`);
+    revalidatePath("/app/today");
+  } catch (error) {
+    console.error("[togglePriorityFromListAction] DB update failed:", error);
+  }
 }
 
 export async function deleteWordFromListAction(formData: FormData): Promise<void> {
@@ -154,12 +160,14 @@ export async function deleteWordFromListAction(formData: FormData): Promise<void
   });
 
   if (!parsed.success) {
+    console.error("[deleteWordFromListAction] Invalid input:", parsed.error.flatten());
     return;
   }
 
   const session = await auth();
   const email = session?.user?.email;
   if (!email) {
+    console.error("[deleteWordFromListAction] Not authenticated");
     return;
   }
 
@@ -168,6 +176,7 @@ export async function deleteWordFromListAction(formData: FormData): Promise<void
     select: { id: true },
   });
   if (!user) {
+    console.error("[deleteWordFromListAction] User not found:", email);
     return;
   }
 
@@ -179,13 +188,17 @@ export async function deleteWordFromListAction(formData: FormData): Promise<void
     select: { id: true },
   });
   if (!word) {
+    console.error("[deleteWordFromListAction] Word not found or not owned:", parsed.data.wordId);
     return;
   }
 
-  await prisma.word.delete({
-    where: { id: word.id },
-  });
-
-  revalidatePath("/app/library");
-  revalidatePath("/app/today");
+  try {
+    await prisma.word.delete({
+      where: { id: word.id },
+    });
+    revalidatePath("/app/library");
+    revalidatePath("/app/today");
+  } catch (error) {
+    console.error("[deleteWordFromListAction] DB delete failed:", error);
+  }
 }

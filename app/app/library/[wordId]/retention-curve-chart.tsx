@@ -1,12 +1,10 @@
-// All retention math lives here so the page stays clean.
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
 function estimateRetention(daysFromReview: number, strengthDays: number): number {
   const safeDays = Math.max(0, daysFromReview);
-  const safeStrength = Math.max(0.15, strengthDays);
+  const safeStrength = Math.max(0.2, strengthDays);
   return Math.exp(-safeDays / safeStrength);
 }
 
@@ -48,23 +46,15 @@ function estimateStandardEbbinghaus(daysFromReview: number): number {
 }
 
 export type RetentionCurveChartProps = {
-  /** Days elapsed since the last review */
   daysSinceReview: number;
-  /** Interval days of the current stage */
-  currentIntervalDays: number;
-  /** Interval days of the next stage (for horizon calculation) */
-  nextIntervalDays: number;
-  /** 0-100 % know rate used to personalise the curve */
   successRate: number;
-  /** Number of lapses for this word */
   lapseCount: number;
-  /** The scheduled due date (null if never scheduled) */
-  dueAt: Date | null;
-  /** Date of the last review (used to compute dueOffsetDays) */
-  lastReviewedAt: Date;
+  masteryPhase: number;
+  freezeRounds: number;
+  consecutivePerfect: number;
+  isMastered: boolean;
 };
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CHART_W = 640;
 const CHART_H = 240;
 const PAD_L = 42;
@@ -76,44 +66,33 @@ const INNER_H = CHART_H - PAD_T - PAD_B;
 
 export function RetentionCurveChart({
   daysSinceReview,
-  currentIntervalDays,
-  nextIntervalDays,
   successRate,
   lapseCount,
-  dueAt,
-  lastReviewedAt,
+  masteryPhase,
+  freezeRounds,
+  consecutivePerfect,
+  isMastered,
 }: RetentionCurveChartProps) {
-  // Personal curve parameters
+  const phaseBoost = masteryPhase * 0.9 + (isMastered ? 1.2 : 0);
+  const freezeBoost = freezeRounds > 0 ? 0.8 : 0;
+  const consecutiveBoost = consecutivePerfect * 0.55;
+
   const personalFloor = clamp(
-    0.22 + successRate / 220 + currentIntervalDays * 0.045 - lapseCount * 0.03,
+    0.2 + successRate / 210 + phaseBoost * 0.05 + freezeBoost * 0.04 + consecutiveBoost * 0.02 - lapseCount * 0.03,
     0.18,
-    0.82,
+    0.88,
   );
   const personalStrengthDays = clamp(
-    1.6 + currentIntervalDays * 0.95 + successRate / 24 - lapseCount * 0.35,
+    1.2 + successRate / 24 + phaseBoost * 1.1 + freezeBoost + consecutiveBoost - lapseCount * 0.35,
     0.8,
     38,
   );
-  const horizonDays = clamp(
-    Math.ceil(Math.max(10, nextIntervalDays + 6, currentIntervalDays + 6, daysSinceReview + 4)),
-    10,
-    30,
-  );
-  const dueOffsetDays = dueAt
-    ? clamp((dueAt.getTime() - lastReviewedAt.getTime()) / MS_PER_DAY, 0, horizonDays)
-    : null;
 
-  // Metrics
+  const horizonDays = clamp(Math.ceil(Math.max(10, daysSinceReview + 10)), 10, 30);
+
   const retentionNow = estimateRetentionWithFloor(daysSinceReview, personalStrengthDays, personalFloor);
   const baselineNow = estimateStandardEbbinghaus(daysSinceReview);
-  const dueRetention =
-    dueOffsetDays === null
-      ? null
-      : estimateRetentionWithFloor(dueOffsetDays, personalStrengthDays, personalFloor);
-  const baselineDueRetention =
-    dueOffsetDays === null ? null : estimateStandardEbbinghaus(dueOffsetDays);
 
-  // SVG coordinate helpers
   const toX = (day: number) => PAD_L + (day / horizonDays) * INNER_W;
   const toY = (r: number) => PAD_T + (1 - r) * INNER_H;
 
@@ -133,8 +112,6 @@ export function RetentionCurveChart({
 
   const currentX = toX(clamp(daysSinceReview, 0, horizonDays));
   const currentY = toY(retentionNow);
-  const dueX = dueOffsetDays === null ? null : toX(dueOffsetDays);
-  const dueY = dueRetention === null ? null : toY(dueRetention);
 
   const yTicks = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0];
   const xTickDays = Array.from(new Set([0, 1, 2, 3, 5, 7, 10, horizonDays]))
@@ -143,14 +120,14 @@ export function RetentionCurveChart({
 
   return (
     <section className="space-y-3 rounded-lg border p-4">
-      <h2 className="text-base font-semibold">Ebbinghaus forgetting curve</h2>
+      <h2 className="text-base font-semibold">Forgetting curve (round model)</h2>
       <p className="text-sm text-gray-600">
-        Your memory curve vs the standard Ebbinghaus baseline.
+        Personal curve is adjusted by your first-impression quality, freeze state, and lapses.
       </p>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
         <svg
-          aria-label="Ebbinghaus forgetting curve"
+          aria-label="Forgetting curve"
           className="h-[240px] w-full min-w-[520px]"
           viewBox={`0 0 ${CHART_W} ${CHART_H}`}
         >
@@ -181,33 +158,18 @@ export function RetentionCurveChart({
           <polyline fill="none" points={baselineLinePoints} stroke="#fb923c" strokeWidth="2.2" strokeLinejoin="round" />
           <polyline fill="none" points={personalLinePoints} stroke="#10b981" strokeWidth="2.4" strokeLinejoin="round" />
 
-          {dueX !== null && dueY !== null ? (
-            <g>
-              <line stroke="#f59e0b" strokeDasharray="4 3" strokeWidth="1.5" x1={dueX} x2={dueX} y1={PAD_T} y2={CHART_H - PAD_B} />
-              <circle cx={dueX} cy={dueY} fill="#f59e0b" r="4.5" />
-            </g>
-          ) : null}
-
           <line stroke="#2563eb" strokeDasharray="4 3" strokeWidth="1.5" x1={currentX} x2={currentX} y1={PAD_T} y2={CHART_H - PAD_B} />
           <circle cx={currentX} cy={currentY} fill="#2563eb" r="4.5" />
         </svg>
       </div>
 
       <div className="grid gap-2 text-sm text-gray-700">
-        {(
-          [
-            ["Estimated retention now", `${Math.round(retentionNow * 100)}%`],
-            ["Baseline retention now", `${Math.round(baselineNow * 100)}%`],
-            ["Strength (days)", `${personalStrengthDays.toFixed(1)}d`],
-            ["Since last review", `${daysSinceReview.toFixed(1)}d`],
-            ...(dueAt && dueRetention !== null
-              ? [["Estimated retention at due time", `${Math.round(dueRetention * 100)}%`]]
-              : []),
-            ...(dueAt && baselineDueRetention !== null
-              ? [["Baseline retention at due time", `${Math.round(baselineDueRetention * 100)}%`]]
-              : []),
-          ] as [string, string][]
-        ).map(([label, value]) => (
+        {[
+          ["Estimated retention now", `${Math.round(retentionNow * 100)}%`],
+          ["Baseline retention now", `${Math.round(baselineNow * 100)}%`],
+          ["Strength (days)", `${personalStrengthDays.toFixed(1)}d`],
+          ["Since last review", `${daysSinceReview.toFixed(1)}d`],
+        ].map(([label, value]) => (
           <div key={label} className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2">
             <span>{label}</span>
             <span className="font-medium">{value}</span>
@@ -219,10 +181,6 @@ export function RetentionCurveChart({
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
           Current point
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-          Due point
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-0.5 w-6 rounded bg-emerald-500" />

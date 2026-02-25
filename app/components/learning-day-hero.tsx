@@ -21,19 +21,19 @@ export default function LearningDayHero({
 }: LearningDayHeroProps) {
   const safeDay = Math.max(dayNumber, 1);
   const wrapperClass = emphasis
-    ? "rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 via-cyan-50 to-blue-50 p-6"
-    : "rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-cyan-50 to-blue-50 p-5";
-  const dayClass = emphasis ? "mt-1 text-5xl font-semibold text-slate-900" : "mt-1 text-3xl font-semibold text-slate-900";
+    ? "rounded-3xl border border-slate-200 bg-gradient-to-r from-cyan-50 via-sky-50 to-indigo-50 p-7 shadow-sm"
+    : "rounded-3xl border border-slate-200 bg-gradient-to-r from-cyan-50 via-sky-50 to-indigo-50 p-6 shadow-sm";
+  const dayClass = emphasis ? "mt-1 text-5xl font-bold tracking-tight text-slate-900" : "mt-1 text-4xl font-bold tracking-tight text-slate-900";
   const scoreValueClass = emphasis ? "text-5xl font-semibold" : "text-2xl font-semibold";
   const scoreCardClass = emphasis
-    ? "rounded-3xl border border-slate-200 bg-white/80 px-5 py-4"
-    : "rounded-xl border border-slate-200 bg-white/80 px-4 py-3";
+    ? "rounded-3xl border border-slate-200 bg-white/85 px-5 py-4 shadow-sm"
+    : "rounded-2xl border border-slate-200 bg-white/85 px-4 py-3 shadow-sm";
 
   return (
     <section className={wrapperClass}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Learning day</div>
+          <div className="text-xs uppercase tracking-[0.22em] text-slate-500">Learning day</div>
           <div className={dayClass}>Day {safeDay}</div>
           <div className="text-sm text-slate-600">
             Started{" "}

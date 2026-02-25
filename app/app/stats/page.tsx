@@ -1,15 +1,16 @@
 import { auth } from "@/src/auth";
-import LearningDayHero from "@/app/components/learning-day-hero";
-import { buildHeatmap } from "@/src/memory-heatmap";
 import { prisma } from "@/src/prisma";
-import { STAGE_INTERVAL_DAYS } from "@/src/review-scheduler";
-import { ActivityBarChart } from "./activity-bar-chart";
-import { ActivityHeatmap } from "./activity-heatmap";
-import { FocusWordsList } from "./focus-words-list";
-import { QualityMetrics } from "./quality-metrics";
-import { StageDistribution } from "./stage-distribution";
+import { loadWordsWithStatus } from "@/src/study-queries";
+import { hasStudyPrismaModels } from "@/src/study-runtime";
+import { parseSessionResults } from "@/src/study-model";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+type PieRow = {
+  name: string;
+  value: number;
+  color: string;
+};
 
 function startOfDay(date: Date): Date {
   const out = new Date(date);
@@ -28,54 +29,16 @@ function dayKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function dayFromKey(key: string): Date {
-  const [y, m, d] = key.split("-").map((part) => Number.parseInt(part, 10));
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
 function buildDailySeries(start: Date, end: Date, counts: Map<string, number>) {
-  const out: Array<{ date: Date; count: number; key: string }> = [];
+  const out: Array<{ date: Date; key: string; words: number }> = [];
   const cursor = startOfDay(start);
   const last = startOfDay(end);
   while (cursor <= last) {
     const key = dayKey(cursor);
-    out.push({ date: new Date(cursor), count: counts.get(key) ?? 0, key });
+    out.push({ date: new Date(cursor), key, words: counts.get(key) ?? 0 });
     cursor.setDate(cursor.getDate() + 1);
   }
   return out;
-}
-
-function calcCurrentStreak(days: Set<string>, today: Date): number {
-  let streak = 0;
-  const cursor = startOfDay(today);
-  while (days.has(dayKey(cursor))) {
-    streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return streak;
-}
-
-function calcLongestStreak(dayKeys: string[]): number {
-  if (dayKeys.length === 0) return 0;
-  const sorted = [...dayKeys].sort();
-  let best = 1;
-  let run = 1;
-  for (let i = 1; i < sorted.length; i += 1) {
-    const prev = dayFromKey(sorted[i - 1]);
-    const curr = dayFromKey(sorted[i]);
-    const diff = Math.round((curr.getTime() - prev.getTime()) / MS_PER_DAY);
-    if (diff === 1) {
-      run += 1;
-      if (run > best) best = run;
-    } else if (diff > 1) {
-      run = 1;
-    }
-  }
-  return best;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }
 
 export default async function StatsPage() {
@@ -93,7 +56,7 @@ export default async function StatsPage() {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, createdAt: true },
+    select: { id: true },
   });
 
   if (!user) {
@@ -107,176 +70,160 @@ export default async function StatsPage() {
 
   const now = new Date();
   const todayStart = startOfDay(now);
-  const start14 = addDays(todayStart, -13);
-  const start30 = addDays(todayStart, -29);
-  const dayNumber =
-    Math.floor((todayStart.getTime() - startOfDay(user.createdAt).getTime()) / MS_PER_DAY) + 1;
+  const start7 = addDays(todayStart, -6);
 
-  const [totalWords, priorityWords, manualMeanings, newWords, reviewStates, logs30, allLogs] =
-    await Promise.all([
-      prisma.word.count({ where: { userId: user.id } }),
-      prisma.word.count({ where: { userId: user.id, isPriority: true } }),
-      prisma.word.count({ where: { userId: user.id, note: { not: null } } }),
-      prisma.word.count({ where: { userId: user.id, reviewState: { is: null } } }),
-      prisma.reviewState.findMany({
-        where: { userId: user.id },
-        select: {
-          stage: true,
-          dueAt: true,
-          lapseCount: true,
-          seenCount: true,
-          word: { select: { text: true, isPriority: true } },
+  const wordsWithStatus = await loadWordsWithStatus(user.id);
+  const totalWords = wordsWithStatus.length;
+  const mastered = wordsWithStatus.filter(
+    (item) => item.status === "mastered" || item.status === "frozen",
+  ).length;
+  const learning = wordsWithStatus.filter(
+    (item) => item.status === "seen" || item.status === "fuzzy" || item.status === "unknown",
+  ).length;
+  const brandNew = wordsWithStatus.filter((item) => item.status === "new").length;
+
+  const pieData: PieRow[] = [
+    { name: "Mastered", value: mastered, color: "#10B981" },
+    { name: "Learning", value: learning, color: "#F59E0B" },
+    { name: "New", value: brandNew, color: "#3B82F6" },
+  ].filter((item) => item.value > 0);
+
+  const dayWordCountMap = new Map<string, number>();
+  let totalSessions = 0;
+
+  if (hasStudyPrismaModels()) {
+    const [sessionsCount, sessions7] = await Promise.all([
+      prisma.studySession.count({ where: { userId: user.id } }),
+      prisma.studySession.findMany({
+        where: {
+          userId: user.id,
+          startedAt: { gte: start7 },
         },
-      }),
-      prisma.reviewLog.findMany({
-        where: { userId: user.id, reviewedAt: { gte: start30 } },
-        select: { grade: true, reviewedAt: true },
-        orderBy: { reviewedAt: "asc" },
-      }),
-      prisma.reviewLog.findMany({
-        where: { userId: user.id },
-        select: { reviewedAt: true },
-        orderBy: { reviewedAt: "asc" },
+        select: {
+          startedAt: true,
+          results: true,
+        },
+        orderBy: { startedAt: "asc" },
       }),
     ]);
 
-  const activeReviewWords = reviewStates.length;
-  const dueNow = reviewStates.filter((state) => state.dueAt <= now).length;
-  const overdue = reviewStates.filter((state) => state.dueAt < todayStart).length;
-  const mastered = reviewStates.filter((state) => state.stage >= 5).length;
-  const stageCounts = Array.from({ length: STAGE_INTERVAL_DAYS.length }, () => 0);
-  for (const state of reviewStates) {
-    const idx = clamp(state.stage, 0, STAGE_INTERVAL_DAYS.length - 1);
-    stageCounts[idx] += 1;
+    totalSessions = sessionsCount;
+    for (const item of sessions7) {
+      const key = dayKey(item.startedAt);
+      const count = parseSessionResults(item.results).length;
+      dayWordCountMap.set(key, (dayWordCountMap.get(key) ?? 0) + count);
+    }
+  } else {
+    const logs7 = await prisma.reviewLog.findMany({
+      where: {
+        userId: user.id,
+        reviewedAt: { gte: start7 },
+      },
+      select: { reviewedAt: true },
+    });
+
+    for (const item of logs7) {
+      const key = dayKey(item.reviewedAt);
+      dayWordCountMap.set(key, (dayWordCountMap.get(key) ?? 0) + 1);
+    }
   }
 
-  const dayCountMap = new Map<string, number>();
-  const grade30 = { know: 0, fuzzy: 0, again: 0 };
-  for (const log of logs30) {
-    const key = dayKey(log.reviewedAt);
-    dayCountMap.set(key, (dayCountMap.get(key) ?? 0) + 1);
-    if (log.grade === 2) grade30.know += 1;
-    else if (log.grade === 1) grade30.fuzzy += 1;
-    else grade30.again += 1;
-  }
+  const sessionData = buildDailySeries(start7, todayStart, dayWordCountMap);
+  const maxWords = Math.max(...sessionData.map((item) => item.words), 1);
 
-  const logsToday = dayCountMap.get(dayKey(now)) ?? 0;
-  const logs7d = buildDailySeries(addDays(todayStart, -6), todayStart, dayCountMap).reduce(
-    (sum, day) => sum + day.count,
-    0,
-  );
-  const logs14Series = buildDailySeries(start14, todayStart, dayCountMap);
-  const max14 = Math.max(...logs14Series.map((day) => day.count), 1);
-  const total30 = logs30.length;
-  const success30 =
-    total30 === 0 ? 0 : Math.round(((grade30.know + grade30.fuzzy * 0.5) / total30) * 100);
-
-  const uniqueDays = Array.from(new Set(allLogs.map((log) => dayKey(log.reviewedAt))));
-  const currentStreak = calcCurrentStreak(new Set(uniqueDays), now);
-  const longestStreak = calcLongestStreak(uniqueDays);
-  const activeDays30 = new Set(logs30.map((log) => dayKey(log.reviewedAt))).size;
-  const avgPerActiveDay30 = activeDays30 === 0 ? 0 : (total30 / activeDays30).toFixed(1);
-
-  const reviewCoverage = totalWords === 0 ? 0 : Math.round((activeReviewWords / totalWords) * 100);
-  const masteryRate = activeReviewWords === 0 ? 0 : Math.round((mastered / activeReviewWords) * 100);
-  const stageWeighted =
-    activeReviewWords === 0
-      ? 0
-      : reviewStates.reduce((sum, state) => sum + state.stage, 0) /
-        (activeReviewWords * (STAGE_INTERVAL_DAYS.length - 1));
-  const healthScore = Math.round(
-    clamp(masteryRate * 0.45 + success30 * 0.35 + stageWeighted * 100 * 0.2, 0, 100),
-  );
-
-  const difficultWords = [...reviewStates]
-    .filter((state) => state.seenCount > 0)
-    .sort((a, b) => {
-      if (a.lapseCount !== b.lapseCount) return b.lapseCount - a.lapseCount;
-      if (a.stage !== b.stage) return a.stage - b.stage;
-      return b.seenCount - a.seenCount;
-    })
-    .slice(0, 8);
-
-  const heatmapWeeks = buildHeatmap(allLogs.map((log) => log.reviewedAt), 140);
+  const donutStops =
+    pieData.length === 0
+      ? "#E5E7EB 0deg 360deg"
+      : (() => {
+          let offset = 0;
+          return pieData
+            .map((item) => {
+              const span = totalWords > 0 ? (item.value / totalWords) * 360 : 0;
+              const from = offset;
+              offset += span;
+              return `${item.color} ${from}deg ${offset}deg`;
+            })
+            .join(", ");
+        })();
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">Stats</h1>
-        <p className="text-sm text-gray-600">
-          Progress dashboard for your spaced-repetition learning pipeline.
-        </p>
-      </div>
+    <div className="space-y-8">
+      <header>
+        <h1 className="text-3xl font-bold text-gray-900">Statistics</h1>
+        <p className="mt-1 text-gray-500">Track your learning progress over time.</p>
+      </header>
 
-      <LearningDayHero
-        dayNumber={dayNumber}
-        healthScore={healthScore}
-        masteryRate={masteryRate}
-        startedAt={startOfDay(user.createdAt)}
-      />
+      <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-6 text-base font-bold text-gray-900">Word Mastery Distribution</h2>
+          {pieData.length === 0 ? (
+            <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-500">
+              No words yet
+            </div>
+          ) : (
+            <>
+              <div className="flex h-64 items-center justify-center">
+                <div
+                  aria-label="Word status distribution"
+                  className="relative h-44 w-44 rounded-full"
+                  style={{ background: `conic-gradient(${donutStops})` }}
+                >
+                  <div className="absolute inset-8 rounded-full bg-white" />
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm text-gray-500">
+                {pieData.map((item) => (
+                  <div className="flex items-center gap-1" key={item.name}>
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span>
+                      {item.name} ({item.value})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </article>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-sm text-slate-600">Total words</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">{totalWords}</div>
-          <div className="mt-2 text-xs text-slate-500">Priority {priorityWords}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-sm text-slate-600">Due now</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">{dueNow}</div>
-          <div className="mt-2 text-xs text-slate-500">Overdue {overdue}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-sm text-slate-600">Reviews today</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">{logsToday}</div>
-          <div className="mt-2 text-xs text-slate-500">Last 7d {logs7d}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-sm text-slate-600">Streak</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">{currentStreak}d</div>
-          <div className="mt-2 text-xs text-slate-500">Best {longestStreak}d</div>
-        </div>
+        <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-6 text-base font-bold text-gray-900">Words Reviewed (Last 7 Days)</h2>
+          <div className="flex h-64 items-end justify-between gap-3 rounded-lg bg-slate-50 p-4">
+            {sessionData.map((item) => {
+              const height = item.words > 0 ? Math.max((item.words / maxWords) * 100, 10) : 6;
+              return (
+                <div className="flex flex-1 flex-col items-center gap-2" key={item.key}>
+                  <div className="text-[11px] text-slate-500">{item.words}</div>
+                  <div className="flex h-full w-full items-end">
+                    <div
+                      className="w-full rounded-t-md bg-indigo-600"
+                      style={{ height: `${height}%` }}
+                      title={`${item.date.toLocaleDateString()}: ${item.words} words`}
+                    />
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    {item.date.toLocaleDateString(undefined, { weekday: "short" })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </article>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          <ActivityBarChart series={logs14Series} max={max14} />
-          <QualityMetrics
-            know={grade30.know}
-            fuzzy={grade30.fuzzy}
-            again={grade30.again}
-            success={success30}
-            activeDays={activeDays30}
-            avgPerActiveDay={avgPerActiveDay30}
-          />
-          <ActivityHeatmap weeks={heatmapWeeks} hasActivity={allLogs.length > 0} />
-        </div>
-
-        <div className="space-y-4">
-          <StageDistribution
-            stageCounts={stageCounts}
-            stageIntervalDays={STAGE_INTERVAL_DAYS}
-            activeReviewWords={activeReviewWords}
-            reviewCoverage={reviewCoverage}
-            newWords={newWords}
-          />
-          <FocusWordsList words={difficultWords} />
-          <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-            <h2 className="text-base font-semibold text-slate-900">Vocabulary details</h2>
-            <div className="flex items-center justify-between">
-              <span>Words with notes</span>
-              <span className="font-medium">{manualMeanings}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Words in review</span>
-              <span className="font-medium">{activeReviewWords}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Not yet started</span>
-              <span className="font-medium">{newWords}</span>
-            </div>
-          </section>
-        </div>
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <article className="rounded-2xl border border-indigo-100 bg-indigo-50 p-6">
+          <p className="text-sm font-medium uppercase text-indigo-600">Total Words</p>
+          <h2 className="mt-2 text-4xl font-bold text-indigo-900">{totalWords}</h2>
+        </article>
+        <article className="rounded-2xl border border-green-100 bg-green-50 p-6">
+          <p className="text-sm font-medium uppercase text-green-600">Mastered</p>
+          <h2 className="mt-2 text-4xl font-bold text-green-900">{mastered}</h2>
+          <p className="mt-1 text-xs text-green-700">Includes frozen words</p>
+        </article>
+        <article className="rounded-2xl border border-blue-100 bg-blue-50 p-6">
+          <p className="text-sm font-medium uppercase text-blue-600">Total Sessions</p>
+          <h2 className="mt-2 text-4xl font-bold text-blue-900">{totalSessions}</h2>
+        </article>
       </section>
     </div>
   );

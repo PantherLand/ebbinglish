@@ -1,22 +1,22 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
-import { planNextReview } from "@/src/review-scheduler";
 
 const MAX_PRACTICE_WORDS = 20;
 
-const submitReviewSchema = z.object({
+const submitReviewBatchItemSchema = z.object({
   wordId: z.string().min(1),
-  grade: z.union([z.literal(0), z.literal(1), z.literal(2)]),
-  revealed: z.boolean(),
+  isFirstTimePerfect: z.boolean(),
+  firstImpressionGrade: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+  revealed: z.boolean().optional(),
 });
 
-export type SubmitReviewInput = z.infer<typeof submitReviewSchema>;
 const submitReviewBatchSchema = z.object({
-  items: z.array(submitReviewSchema).min(1).max(200),
+  items: z.array(submitReviewBatchItemSchema).min(1).max(400),
 });
 const generatePracticeStorySchema = z.object({
   words: z.array(z.string().trim().min(1).max(64)).min(1).max(MAX_PRACTICE_WORDS),
@@ -32,22 +32,21 @@ const generatedStorySchema = z.object({
     .optional(),
 });
 
-export type SubmitReviewResult =
-  | {
-      ok: true;
-      nextStage: number;
-      nextDueAt: string;
-    }
-  | {
-      ok: false;
-      message: string;
-    };
-
 export type SubmitReviewBatchInput = z.infer<typeof submitReviewBatchSchema>;
 export type SubmitReviewBatchResult =
   | {
       ok: true;
       saved: number;
+      nextGlobalRound: number;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+export type AdvanceToNextSessionResult =
+  | {
+      ok: true;
+      nextGlobalRound: number;
     }
   | {
       ok: false;
@@ -90,98 +89,93 @@ function extractJsonObject(raw: string): unknown | null {
   }
 }
 
-export async function submitReviewAction(
-  input: SubmitReviewInput,
-): Promise<SubmitReviewResult> {
-  const parsed = submitReviewSchema.safeParse(input);
+type FirstImpressionState = {
+  consecutivePerfect: number;
+  freezeRounds: number;
+  isMastered: boolean;
+  masteryPhase: number;
+};
 
-  if (!parsed.success) {
-    return { ok: false, message: "Invalid review payload" };
+function computeNextFirstImpressionState(
+  current: FirstImpressionState,
+  isFirstTimePerfect: boolean,
+): FirstImpressionState {
+  if (current.isMastered || current.masteryPhase >= 3) {
+    return {
+      consecutivePerfect: 0,
+      freezeRounds: 0,
+      isMastered: true,
+      masteryPhase: 3,
+    };
   }
 
-  const session = await auth();
-  const email = session?.user?.email;
-
-  if (!email) {
-    return { ok: false, message: "Please sign in first" };
+  if (current.freezeRounds > 0) {
+    return current;
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true },
-  });
-
-  if (!user) {
-    return { ok: false, message: "User not found" };
+  // Phase 0: base mastery phase, need 2 consecutive "first-seen known" to enter freeze-3.
+  if (current.masteryPhase <= 0) {
+    const consecutivePerfect = isFirstTimePerfect ? current.consecutivePerfect + 1 : 0;
+    if (consecutivePerfect >= 2) {
+      return {
+        consecutivePerfect: 0,
+        freezeRounds: 3,
+        isMastered: false,
+        masteryPhase: 1,
+      };
+    }
+    return {
+      consecutivePerfect,
+      freezeRounds: 0,
+      isMastered: false,
+      masteryPhase: 0,
+    };
   }
 
-  const { wordId, grade, revealed } = parsed.data;
-
-  const word = await prisma.word.findFirst({
-    where: {
-      id: wordId,
-      userId: user.id,
-    },
-    select: { id: true },
-  });
-
-  if (!word) {
-    return { ok: false, message: "Word not found" };
+  // Phase 1: after 3-round freeze, first-seen known => freeze-6, else reset as new.
+  if (current.masteryPhase === 1) {
+    if (isFirstTimePerfect) {
+      return {
+        consecutivePerfect: 0,
+        freezeRounds: 6,
+        isMastered: false,
+        masteryPhase: 2,
+      };
+    }
+    return {
+      consecutivePerfect: 0,
+      freezeRounds: 0,
+      isMastered: false,
+      masteryPhase: 0,
+    };
   }
 
-  const existing = await prisma.reviewState.findUnique({
-    where: { wordId: word.id },
-    select: { stage: true },
-  });
-
-  const now = new Date();
-  const plan = planNextReview(existing?.stage ?? 0, grade, now);
-
-  const updateData: Prisma.ReviewStateUpdateInput = {
-    stage: plan.nextStage,
-    dueAt: plan.dueAt,
-    lastReviewedAt: now,
-    seenCount: { increment: 1 },
-  };
-
-  if (plan.lapseIncrement > 0) {
-    updateData.lapseCount = { increment: plan.lapseIncrement };
-  }
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      await tx.reviewLog.create({
-        data: {
-          userId: user.id,
-          wordId: word.id,
-          grade,
-          revealedAnswer: revealed,
-        },
-      });
-
-      await tx.reviewState.upsert({
-        where: { wordId: word.id },
-        create: {
-          userId: user.id,
-          wordId: word.id,
-          stage: plan.nextStage,
-          dueAt: plan.dueAt,
-          lastReviewedAt: now,
-          lapseCount: plan.lapseIncrement,
-          seenCount: 1,
-        },
-        update: updateData,
-      });
-    });
-  } catch {
-    return { ok: false, message: "Failed to save review" };
+  // Phase 2: after 6-round freeze, first-seen known => mastered, else reset as new.
+  if (isFirstTimePerfect) {
+    return {
+      consecutivePerfect: 0,
+      freezeRounds: 0,
+      isMastered: true,
+      masteryPhase: 3,
+    };
   }
 
   return {
-    ok: true,
-    nextStage: plan.nextStage,
-    nextDueAt: plan.dueAt.toISOString(),
+    consecutivePerfect: 0,
+    freezeRounds: 0,
+    isMastered: false,
+    masteryPhase: 0,
   };
+}
+
+async function decrementFreezeRounds(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<void> {
+  await tx.reviewState.updateMany({
+    where: { userId, freezeRounds: { gt: 0 } },
+    data: { freezeRounds: { decrement: 1 } },
+  });
 }
 
 export async function submitReviewBatchAction(
@@ -209,7 +203,8 @@ export async function submitReviewBatchAction(
     return { ok: false, message: "User not found" };
   }
 
-  const wordIds = [...new Set(parsed.data.items.map((item) => item.wordId))];
+  const dedupedItems = [...new Map(parsed.data.items.map((item) => [item.wordId, item])).values()];
+  const wordIds = dedupedItems.map((item) => item.wordId);
   const ownedWords = await prisma.word.findMany({
     where: {
       userId: user.id,
@@ -222,71 +217,131 @@ export async function submitReviewBatchAction(
     return { ok: false, message: "Some words are invalid for this user" };
   }
 
-  const stateRows = await prisma.reviewState.findMany({
-    where: {
-      wordId: { in: wordIds },
-    },
-    select: { wordId: true, stage: true },
-  });
-  const stageByWordId = new Map(stateRows.map((item) => [item.wordId, item.stage]));
-
   const now = new Date();
-  const writeOps = parsed.data.items.map((item) => {
-    const plan = planNextReview(stageByWordId.get(item.wordId) ?? 0, item.grade, now);
-    stageByWordId.set(item.wordId, plan.nextStage);
-
-    const updateData: Prisma.ReviewStateUpdateInput = {
-      stage: plan.nextStage,
-      dueAt: plan.dueAt,
-      lastReviewedAt: now,
-      seenCount: { increment: 1 },
-    };
-
-    if (plan.lapseIncrement > 0) {
-      updateData.lapseCount = { increment: plan.lapseIncrement };
-    }
-
-    return {
-      wordId: item.wordId,
-      grade: item.grade,
-      revealed: item.revealed,
-      plan,
-      updateData,
-    };
-  });
 
   try {
-    await prisma.$transaction(async (tx) => {
-      for (const op of writeOps) {
+    const nextGlobalRound = await prisma.$transaction(async (tx) => {
+      // Round settlement: consume one freeze turn for every currently frozen word.
+      await decrementFreezeRounds(tx, user.id);
+
+      const existingStates = await tx.reviewState.findMany({
+        where: {
+          userId: user.id,
+          wordId: { in: wordIds },
+        },
+        select: {
+          wordId: true,
+          seenCount: true,
+          lapseCount: true,
+          consecutivePerfect: true,
+          freezeRounds: true,
+          isMastered: true,
+          masteryPhase: true,
+        },
+      });
+      const stateByWordId = new Map(existingStates.map((state) => [state.wordId, state]));
+
+      for (const item of dedupedItems) {
+        const current = stateByWordId.get(item.wordId);
+        const baseState: FirstImpressionState = {
+          consecutivePerfect: current?.consecutivePerfect ?? 0,
+          freezeRounds: current?.freezeRounds ?? 0,
+          isMastered: current?.isMastered ?? false,
+          masteryPhase: current?.masteryPhase ?? 0,
+        };
+        const nextState = computeNextFirstImpressionState(baseState, item.isFirstTimePerfect);
+        const grade = item.firstImpressionGrade ?? (item.isFirstTimePerfect ? 2 : 0);
+
         await tx.reviewLog.create({
           data: {
             userId: user.id,
-            wordId: op.wordId,
-            grade: op.grade,
-            revealedAnswer: op.revealed,
+            wordId: item.wordId,
+            grade,
+            revealedAnswer: item.revealed ?? true,
           },
         });
 
         await tx.reviewState.upsert({
-          where: { wordId: op.wordId },
+          where: { wordId: item.wordId },
           create: {
             userId: user.id,
-            wordId: op.wordId,
-            stage: op.plan.nextStage,
-            dueAt: op.plan.dueAt,
+            wordId: item.wordId,
             lastReviewedAt: now,
-            lapseCount: op.plan.lapseIncrement,
+            lapseCount: grade === 0 ? 1 : 0,
             seenCount: 1,
+            consecutivePerfect: nextState.consecutivePerfect,
+            freezeRounds: nextState.freezeRounds,
+            isMastered: nextState.isMastered,
+            masteryPhase: nextState.masteryPhase,
           },
-          update: op.updateData,
+          update: {
+            lastReviewedAt: now,
+            seenCount: { increment: 1 },
+            lapseCount: grade === 0 ? { increment: 1 } : undefined,
+            consecutivePerfect: nextState.consecutivePerfect,
+            freezeRounds: nextState.freezeRounds,
+            isMastered: nextState.isMastered,
+            masteryPhase: nextState.masteryPhase,
+          },
         });
       }
+
+      const updatedUser = await tx.user.update({
+        where: { id: user.id },
+        data: { currentGlobalRound: { increment: 1 } },
+        select: { currentGlobalRound: true },
+      });
+
+      return updatedUser.currentGlobalRound;
     });
+
+    revalidatePath("/app/today");
+    revalidatePath("/app/library");
+    revalidatePath("/app/stats");
+
+    return { ok: true, saved: dedupedItems.length, nextGlobalRound };
   } catch {
     return { ok: false, message: "Failed to save review batch" };
   }
+}
 
-  return { ok: true, saved: writeOps.length };
+export async function advanceToNextSessionAction(): Promise<AdvanceToNextSessionResult> {
+  const session = await auth();
+  const email = session?.user?.email;
+
+  if (!email) {
+    return { ok: false, message: "Please sign in first" };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  if (!user) {
+    return { ok: false, message: "User not found" };
+  }
+
+  try {
+    const nextGlobalRound = await prisma.$transaction(async (tx) => {
+      await decrementFreezeRounds(tx, user.id);
+
+      const updated = await tx.user.update({
+        where: { id: user.id },
+        data: { currentGlobalRound: { increment: 1 } },
+        select: { currentGlobalRound: true },
+      });
+      return updated.currentGlobalRound;
+    });
+
+    revalidatePath("/app/today");
+    revalidatePath("/app/library");
+    revalidatePath("/app/stats");
+
+    return { ok: true, nextGlobalRound };
+  } catch {
+    return { ok: false, message: "Failed to advance session" };
+  }
 }
 
 export async function generatePracticeStoryAction(
@@ -372,16 +427,6 @@ export async function generatePracticeStoryAction(
       return { ok: false, message: "OpenAI generation timed out" };
     }
     const errorMessage = error instanceof Error ? error.message : "Unknown network error";
-    if (
-      errorMessage.includes("127.0.0.1:7890") ||
-      errorMessage.includes("127.0.0.1:7891")
-    ) {
-      return {
-        ok: false,
-        message:
-          "Local proxy 127.0.0.1:7890/7891 is unreachable. Start proxy client or unset http_proxy/https_proxy/all_proxy.",
-      };
-    }
     return { ok: false, message: `Failed to contact OpenAI: ${errorMessage}` };
   } finally {
     clearTimeout(timeout);

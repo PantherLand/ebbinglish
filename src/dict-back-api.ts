@@ -82,6 +82,31 @@ const DEFAULT_DICT_ID = "oxford-1";
 const FALLBACK_DICT_ID = "dictionaryapi-dev";
 const REQUEST_TIMEOUT_MS = 8000;
 
+// --- Structural limits (how many items to keep during parsing) ---
+const DICT_ENTRIES_LIMIT = 4;      // max entries from dictionaryapi.dev
+const POS_BLOCKS_LIMIT = 8;        // max POS blocks per entry
+const SENSES_LIMIT = 12;           // max senses per POS block or entry
+const LABELS_LIMIT = 6;            // max labels per sense/block
+const EXAMPLES_LIMIT = 4;          // max examples per sense
+const SUBSENSE_EXAMPLES_LIMIT = 3; // max examples per subsense
+const SUBSENSES_LIMIT = 5;         // max subsenses per sense
+const IDIOM_SENSES_LIMIT = 3;      // max senses per idiom
+const IDIOMS_LIMIT = 8;            // max idioms per entry
+const PRONUNCIATIONS_LIMIT = 4;    // max IPA strings
+const AUDIO_URLS_LIMIT = 3;        // max audio URLs
+
+// --- Text-length caps (characters) ---
+const LEN_IPA = 80;
+const LEN_EXAMPLE = 300;
+const LEN_SUBSENSE_DEF = 320;
+const LEN_SENSE_DEF = 360;
+const LEN_MEANING = 500;
+const LEN_PHRASE = 120;
+const LEN_HEADWORD = 120;
+const LEN_POS = 40;
+const LEN_SENSE_NUM = 16;
+const LEN_FALLBACK = 1200;
+
 function normalizeDictId(dictId: string): string {
   return dictId.trim().toLowerCase();
 }
@@ -178,7 +203,7 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-function toSafeText(input: string | null, max: number = 500): string | null {
+function toSafeText(input: string | null, max: number = LEN_MEANING): string | null {
   if (!input) {
     return null;
   }
@@ -193,7 +218,7 @@ function toSafeText(input: string | null, max: number = 500): string | null {
 
 function parseExample(value: unknown): DictEntryExample | null {
   if (typeof value === "string") {
-    const en = toSafeText(value, 300);
+    const en = toSafeText(value, LEN_EXAMPLE);
     return en ? { en, zh: null } : null;
   }
 
@@ -211,8 +236,8 @@ function parseExample(value: unknown): DictEntryExample | null {
   }
 
   return {
-    en: toSafeText(en, 300),
-    zh: toSafeText(zh, 300),
+    en: toSafeText(en, LEN_EXAMPLE),
+    zh: toSafeText(zh, LEN_EXAMPLE),
   };
 }
 
@@ -249,10 +274,10 @@ function parseSubsense(value: unknown): DictEntrySubsense | null {
   }
 
   return {
-    labels: asStringArray(record.labels, 6),
-    definitionEn: toSafeText(definitionEn, 320),
-    definitionZh: toSafeText(definitionZh, 320),
-    examples: parseExamples(record.examples, 3),
+    labels: asStringArray(record.labels, LABELS_LIMIT),
+    definitionEn: toSafeText(definitionEn, LEN_SUBSENSE_DEF),
+    definitionZh: toSafeText(definitionZh, LEN_SUBSENSE_DEF),
+    examples: parseExamples(record.examples, SUBSENSE_EXAMPLES_LIMIT),
   };
 }
 
@@ -271,7 +296,7 @@ function parseSense(value: unknown): DictEntrySense | null {
     const parsed = parseSubsense(subsense);
     if (parsed) {
       subsenses.push(parsed);
-      if (subsenses.length >= 5) {
+      if (subsenses.length >= SUBSENSES_LIMIT) {
         break;
       }
     }
@@ -282,11 +307,11 @@ function parseSense(value: unknown): DictEntrySense | null {
   }
 
   return {
-    num: toSafeText(asString(record.num), 16),
-    labels: asStringArray(record.labels, 6),
-    definitionEn: toSafeText(definitionEn, 360),
-    definitionZh: toSafeText(definitionZh, 360),
-    examples: parseExamples(record.examples, 4),
+    num: toSafeText(asString(record.num), LEN_SENSE_NUM),
+    labels: asStringArray(record.labels, LABELS_LIMIT),
+    definitionEn: toSafeText(definitionEn, LEN_SENSE_DEF),
+    definitionZh: toSafeText(definitionZh, LEN_SENSE_DEF),
+    examples: parseExamples(record.examples, EXAMPLES_LIMIT),
     subsenses,
   };
 }
@@ -331,7 +356,7 @@ function parseIdioms(value: unknown): DictEntryIdiom[] {
       const parsed = parseIdiomSense(sense);
       if (parsed) {
         senses.push(parsed);
-        if (senses.length >= 3) {
+        if (senses.length >= IDIOM_SENSES_LIMIT) {
           break;
         }
       }
@@ -339,12 +364,12 @@ function parseIdioms(value: unknown): DictEntryIdiom[] {
 
     if (senses.length > 0) {
       idioms.push({
-        phrase: toSafeText(phrase, 120) || phrase,
+        phrase: toSafeText(phrase, LEN_PHRASE) || phrase,
         senses,
       });
     }
 
-    if (idioms.length >= 8) {
+    if (idioms.length >= IDIOMS_LIMIT) {
       break;
     }
   }
@@ -377,14 +402,14 @@ function parsePosBlock(value: unknown): DictEntryPosBlock | null {
     return null;
   }
 
-  const senses = parseSenses(record.senses, 12);
+  const senses = parseSenses(record.senses, SENSES_LIMIT);
   if (senses.length === 0) {
     return null;
   }
 
   return {
-    pos: toSafeText(asString(record.pos), 40),
-    labels: asStringArray(record.labels, 6),
+    pos: toSafeText(asString(record.pos), LEN_POS),
+    labels: asStringArray(record.labels, LABELS_LIMIT),
     senses,
   };
 }
@@ -399,7 +424,7 @@ function parsePosBlocks(value: unknown): DictEntryPosBlock[] {
     const parsed = parsePosBlock(item);
     if (parsed) {
       out.push(parsed);
-      if (out.length >= 8) {
+      if (out.length >= POS_BLOCKS_LIMIT) {
         break;
       }
     }
@@ -425,13 +450,13 @@ function parsePronunciations(value: unknown): string[] {
       asString(record.ipa_raw) || asString(record.ipa) || asString(record.label);
 
     if (ipa) {
-      const normalized = toSafeText(ipa, 80);
+      const normalized = toSafeText(ipa, LEN_IPA);
       if (normalized && !out.includes(normalized)) {
         out.push(normalized);
       }
     }
 
-    if (out.length >= 4) {
+    if (out.length >= PRONUNCIATIONS_LIMIT) {
       break;
     }
   }
@@ -462,14 +487,14 @@ function parseStructuredEntry(content: unknown): {
 
   const rawPosBlocks = record.pos_blocks ?? record.posBlocks;
   const parsedPosBlocks = parsePosBlocks(rawPosBlocks);
-  const standaloneSenses = parseSenses(record.senses, 12);
-  const sensesFromBlocks = parsedPosBlocks.flatMap((block) => block.senses).slice(0, 12);
+  const standaloneSenses = parseSenses(record.senses, SENSES_LIMIT);
+  const sensesFromBlocks = parsedPosBlocks.flatMap((block) => block.senses).slice(0, SENSES_LIMIT);
   const senses = sensesFromBlocks.length > 0 ? sensesFromBlocks : standaloneSenses;
 
-  const text = toSafeText(asString(record.text), 1200);
+  const text = toSafeText(asString(record.text), LEN_FALLBACK);
   const rawHtml = asString(record.raw_html);
-  const fallbackText = text || (rawHtml ? toSafeText(stripHtml(rawHtml), 1200) : null);
-  const fallbackPos = toSafeText(asString(record.pos), 40);
+  const fallbackText = text || (rawHtml ? toSafeText(stripHtml(rawHtml), LEN_FALLBACK) : null);
+  const fallbackPos = toSafeText(asString(record.pos), LEN_POS);
   const posBlocks =
     parsedPosBlocks.length > 0
       ? parsedPosBlocks
@@ -477,7 +502,7 @@ function parseStructuredEntry(content: unknown): {
         ? [
             {
               pos: fallbackPos,
-              labels: asStringArray(record.labels, 6),
+              labels: asStringArray(record.labels, LABELS_LIMIT),
               senses,
             },
           ]
@@ -503,17 +528,17 @@ function pickPrimaryMeaningFromSenses(
   if (firstSense) {
     const fromSense = firstSense.definitionZh || firstSense.definitionEn;
     if (fromSense) {
-      return toSafeText(fromSense, 500);
+      return toSafeText(fromSense, LEN_MEANING);
     }
 
     const fromSubsense =
       firstSense.subsenses[0]?.definitionZh || firstSense.subsenses[0]?.definitionEn;
     if (fromSubsense) {
-      return toSafeText(fromSubsense, 500);
+      return toSafeText(fromSubsense, LEN_MEANING);
     }
   }
 
-  return toSafeText(fallbackText, 500);
+  return toSafeText(fallbackText, LEN_MEANING);
 }
 
 function emptyEntryDetail(headword: string): DictEntryDetail {
@@ -564,7 +589,7 @@ function parseDictionaryApiDevContent(content: unknown): {
   const entries = content
     .map((item) => asRecord(item))
     .filter((item): item is Record<string, unknown> => Boolean(item))
-    .slice(0, 4);
+    .slice(0, DICT_ENTRIES_LIMIT);
 
   if (entries.length === 0) {
     return null;
@@ -576,7 +601,7 @@ function parseDictionaryApiDevContent(content: unknown): {
   let resolvedHeadword: string | null = null;
 
   const addPronunciation = (value: string | null) => {
-    const normalized = toSafeText(value, 80);
+    const normalized = toSafeText(value, LEN_IPA);
     if (normalized) {
       pronunciationSet.add(normalized);
     }
@@ -599,7 +624,7 @@ function parseDictionaryApiDevContent(content: unknown): {
 
   for (const entry of entries) {
     if (!resolvedHeadword) {
-      resolvedHeadword = toSafeText(asString(entry.word), 120);
+      resolvedHeadword = toSafeText(asString(entry.word), LEN_HEADWORD);
     }
 
     addPronunciation(asString(entry.phonetic));
@@ -612,7 +637,7 @@ function parseDictionaryApiDevContent(content: unknown): {
         }
         addPronunciation(asString(record.text));
         addAudioUrl(asString(record.audio));
-        if (pronunciationSet.size >= 4 && audioUrlSet.size >= 3) {
+        if (pronunciationSet.size >= PRONUNCIATIONS_LIMIT && audioUrlSet.size >= AUDIO_URLS_LIMIT) {
           break;
         }
       }
@@ -638,13 +663,13 @@ function parseDictionaryApiDevContent(content: unknown): {
 
         const definitionEn = toSafeText(
           asString(definitionRecord.definition) || asString(definitionRecord.meaning),
-          360,
+          LEN_SENSE_DEF,
         );
         if (!definitionEn || isLikelyNotFoundText(definitionEn)) {
           continue;
         }
 
-        const example = toSafeText(asString(definitionRecord.example), 300);
+        const example = toSafeText(asString(definitionRecord.example), LEN_EXAMPLE);
         senses.push({
           num: String(i + 1),
           labels: [],
@@ -654,7 +679,7 @@ function parseDictionaryApiDevContent(content: unknown): {
           subsenses: [],
         });
 
-        if (senses.length >= 12) {
+        if (senses.length >= SENSES_LIMIT) {
           break;
         }
       }
@@ -666,13 +691,13 @@ function parseDictionaryApiDevContent(content: unknown): {
       posBlocks.push({
         pos: toSafeText(
           asString(meaningRecord.partOfSpeech) || asString(meaningRecord.pos),
-          40,
+          LEN_POS,
         ),
         labels: [],
         senses,
       });
 
-      if (posBlocks.length >= 8) {
+      if (posBlocks.length >= POS_BLOCKS_LIMIT) {
         break;
       }
     }
@@ -682,11 +707,11 @@ function parseDictionaryApiDevContent(content: unknown): {
     }
   }
 
-  const pronunciations = [...pronunciationSet].slice(0, 4);
-  const senses = posBlocks.flatMap((block) => block.senses).slice(0, 12);
+  const pronunciations = [...pronunciationSet].slice(0, PRONUNCIATIONS_LIMIT);
+  const senses = posBlocks.flatMap((block) => block.senses).slice(0, SENSES_LIMIT);
   const fallbackText = toSafeText(
     senses[0]?.definitionEn || senses[0]?.definitionZh || null,
-    500,
+    LEN_MEANING,
   );
   const pos = posBlocks.find((block) => block.pos)?.pos ?? null;
 
@@ -698,7 +723,7 @@ function parseDictionaryApiDevContent(content: unknown): {
     headword: resolvedHeadword,
     pos,
     pronunciations,
-    audioUrls: [...audioUrlSet].slice(0, 3),
+    audioUrls: [...audioUrlSet].slice(0, AUDIO_URLS_LIMIT),
     posBlocks,
     senses,
     fallbackText,
@@ -734,12 +759,12 @@ function parseEntryPayload(headword: string, payload: DictEntryResponse): DictEn
   if (typeof content === "string") {
     const fallbackText = toSafeText(
       contentType.includes("html") ? stripHtml(content) : content,
-      1200,
+      LEN_FALLBACK,
     );
 
     return {
       headword: returnedHeadword,
-      meaning: toSafeText(fallbackText, 500),
+      meaning: toSafeText(fallbackText, LEN_MEANING),
       pos: null,
       pronunciations: [],
       audioUrls: [],
@@ -896,12 +921,34 @@ export async function suggestHeadwords(
   }
 }
 
-export async function lookupEntryDetail(headword: string): Promise<DictEntryDetail> {
-  const config = getConfig();
-  if (!config) {
-    return emptyEntryDetail(headword);
-  }
+// ---- In-process entry cache -------------------------------------------
+// Prevents repeated network calls for the same headword within a single
+// server process lifetime. Entries expire after 10 minutes.
+const entryDetailCache = new Map<string, { detail: DictEntryDetail; expiresAt: number }>();
+const ENTRY_CACHE_TTL_MS = 10 * 60 * 1000;
 
+function getCachedEntry(key: string): DictEntryDetail | null {
+  const cached = entryDetailCache.get(key);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    entryDetailCache.delete(key);
+    return null;
+  }
+  return cached.detail;
+}
+
+function setCachedEntry(key: string, detail: DictEntryDetail): void {
+  entryDetailCache.set(key, { detail, expiresAt: Date.now() + ENTRY_CACHE_TTL_MS });
+  // Prune expired entries when the cache grows large.
+  if (entryDetailCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of entryDetailCache) {
+      if (now > v.expiresAt) entryDetailCache.delete(k);
+    }
+  }
+}
+
+async function fetchEntryDetail(config: DictConfig, headword: string): Promise<DictEntryDetail> {
   const canFallback =
     shouldUseFallbackDict(config.dictId) &&
     normalizeDictId(config.dictId) !== normalizeDictId(FALLBACK_DICT_ID);
@@ -960,6 +1007,21 @@ export async function lookupEntryDetail(headword: string): Promise<DictEntryDeta
     }
     throw error;
   }
+}
+
+export async function lookupEntryDetail(headword: string): Promise<DictEntryDetail> {
+  const config = getConfig();
+  if (!config) {
+    return emptyEntryDetail(headword);
+  }
+
+  const cacheKey = `${normalizeDictId(config.dictId)}:${headword.trim().toLowerCase()}`;
+  const cached = getCachedEntry(cacheKey);
+  if (cached) return cached;
+
+  const result = await fetchEntryDetail(config, headword);
+  setCachedEntry(cacheKey, result);
+  return result;
 }
 
 export async function lookupMeaning(

@@ -17,6 +17,7 @@ type DictMeaningPayload = {
   meaning?: string | null;
   pos?: string | null;
   pronunciations?: string[];
+  audioUrls?: string[];
   posBlocks?: DictionaryEntryData["posBlocks"];
   senses?: DictionaryEntryData["senses"];
   idioms?: DictionaryEntryData["idioms"];
@@ -29,7 +30,11 @@ const initialState: CreateWordState = {
   status: "idle",
 };
 
-export default function AddWordForm() {
+type AddWordFormProps = {
+  className?: string;
+};
+
+export default function AddWordForm({ className }: AddWordFormProps) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const suggestAbortRef = useRef<AbortController | null>(null);
@@ -284,6 +289,7 @@ export default function AddWordForm() {
         meaning: payload.meaning || null,
         pos: payload.pos || null,
         pronunciations: payload.pronunciations ?? [],
+        audioUrls: payload.audioUrls ?? [],
         posBlocks: payload.posBlocks ?? [],
         senses: payload.senses ?? [],
         idioms: payload.idioms ?? [],
@@ -332,7 +338,7 @@ export default function AddWordForm() {
     <form
       ref={formRef}
       action={formAction}
-      className="space-y-4 rounded-xl border border-slate-300 bg-white p-5 shadow-sm"
+      className={`space-y-4 rounded-xl border border-slate-300 bg-white p-5 shadow-sm ${className ?? ""}`}
     >
       <h2 className="text-base font-semibold">Add a new word card</h2>
 

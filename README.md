@@ -1,17 +1,17 @@
 # Ebbinglish
 
 A vocabulary learning web app that combines:
-- **Ebbinghaus-style spaced repetition** (fixed review stages)
+- **Round-driven mastery flow** (encounter + polish + freeze)
 - **YouGlish video immersion** (learn words in real spoken context)
 - **Google account login** (NextAuth/Auth.js)
 
 ## MVP
 - Google login
 - Word library (manual add + CSV import)
-- Review queue (Today) with 3-grade feedback: know / fuzzy / don’t know
-- Scheduling using fixed stages (configurable)
+- Round/session review (Today) with 3-grade feedback: know / fuzzy / don’t know
+- First-impression mastery state: consecutive perfect / freeze rounds / mastered
 - YouGlish integration (link or embed) per word
-- Basic stats (streak, due count, hardest words)
+- Basic stats (streak, active/frozen/mastered distribution, hardest words)
 
 ## Tech
 - Next.js (App Router) + TypeScript + Tailwind
@@ -29,6 +29,10 @@ Create `.env`:
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/ebbinglish"
 NEXTAUTH_SECRET="<random-32+>"
 NEXTAUTH_URL="http://localhost:3000"
+# Optional (Auth.js v5 aliases)
+# AUTH_SECRET="<same-as-nextauth-secret>"
+# AUTH_URL="http://localhost:3000"
+# AUTH_TRUST_HOST="true"
 GOOGLE_CLIENT_ID="..."
 GOOGLE_CLIENT_SECRET="..."
 DICT_BACK_API="http://localhost:8787/v1"
@@ -72,7 +76,7 @@ In Google Cloud Console:
 
 ## TODO (next)
 - Word CRUD + CSV import
-- Review scheduler + due queue query
+- Round pool strategy tuning
 - Review UI (front/back, reveal meaning, grading)
 - YouGlish integration per word
 - Stats

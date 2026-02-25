@@ -6,7 +6,10 @@ type MemoryRatingCardProps = {
   successRate: number;
   revealTimes: number;
   seenCount: number;
-  currentStage: number;
+  consecutivePerfect: number;
+  freezeRounds: number;
+  masteryPhase: number;
+  isMastered: boolean;
 };
 
 export function MemoryRatingCard({
@@ -17,7 +20,10 @@ export function MemoryRatingCard({
   successRate,
   revealTimes,
   seenCount,
-  currentStage,
+  consecutivePerfect,
+  freezeRounds,
+  masteryPhase,
+  isMastered,
 }: MemoryRatingCardProps) {
   return (
     <section className="space-y-3 rounded-lg border p-4">
@@ -45,8 +51,20 @@ export function MemoryRatingCard({
           <span className="font-medium">{seenCount}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span>Current stage</span>
-          <span className="font-medium">{currentStage}</span>
+          <span>Mastery phase</span>
+          <span className="font-medium">{masteryPhase}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Consecutive first-known</span>
+          <span className="font-medium">{consecutivePerfect}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Freeze rounds</span>
+          <span className="font-medium">{freezeRounds}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Mastered</span>
+          <span className="font-medium">{isMastered ? "Yes" : "No"}</span>
         </div>
       </div>
     </section>

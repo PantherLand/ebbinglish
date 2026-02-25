@@ -18,13 +18,17 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  currentGlobalRound Int  @default(1)
 
   accounts Account[]
   sessions Session[]
 
-  words       Word[]
-  reviewState ReviewState[]
-  reviewLog   ReviewLog[]
+  words          Word[]
+  reviewState    ReviewState[]
+  reviewLog      ReviewLog[]
+  studyRounds    StudyRound[]
+  studySessions  StudySession[]
+  studySettings  StudySettings?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -87,17 +91,20 @@ model Word {
   @@unique([userId, language, text])
 }
 
-// Ebbinghaus-like fixed stages (configurable in app code)
+// Round-driven review state.
 model ReviewState {
   id            String   @id @default(cuid())
   userId        String
   wordId        String   @unique
 
-  stage         Int      @default(0)
-  dueAt         DateTime
   lastReviewedAt DateTime?
   lapseCount    Int      @default(0)
   seenCount     Int      @default(0)
+  consecutivePerfect Int @default(0)
+  freezeRounds  Int      @default(0)
+  isMastered    Boolean  @default(false)
+  // 0: base, 1: after 3-round freeze, 2: after 6-round freeze, 3: mastered
+  masteryPhase  Int      @default(0)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   word Word @relation(fields: [wordId], references: [id], onDelete: Cascade)
@@ -105,7 +112,8 @@ model ReviewState {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId, dueAt])
+  @@index([userId, createdAt])
+  @@index([userId, freezeRounds, isMastered])
 }
 
 model ReviewLog {
@@ -125,4 +133,55 @@ model ReviewLog {
 
   @@index([userId, reviewedAt])
   @@index([wordId, reviewedAt])
+}
+
+model StudySettings {
+  id                     String  @id @default(cuid())
+  userId                 String  @unique
+  sessionSize            Int     @default(20)
+  freezeRounds           Int     @default(3)
+  autoPlayAudio          Boolean @default(true)
+  requireConsecutiveKnown Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StudyRound {
+  id                 String   @id @default(cuid())
+  userId             String
+  name               String
+  status             String   @default("active")
+  wordIds            String[]
+  completedWordIds   String[]
+  attemptedWordIds   String[]
+  firstTryKnownWordIds String[]
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions  StudySession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status, createdAt])
+}
+
+model StudySession {
+  id        String   @id @default(cuid())
+  userId    String
+  roundId   String
+  type      String
+  wordIds   String[]
+  results   Json?
+
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  round StudyRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@index([roundId, startedAt])
 }

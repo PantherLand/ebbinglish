@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import YouglishModal from "@/app/components/youglish-modal";
 
 export type DictionaryEntryExample = {
@@ -48,6 +48,7 @@ export type DictionaryEntryData = {
   meaning: string | null;
   pos: string | null;
   pronunciations: string[];
+  audioUrls: string[];
   posBlocks: DictionaryEntryPosBlock[];
   senses: DictionaryEntrySense[];
   idioms: DictionaryEntryIdiom[];
@@ -214,6 +215,68 @@ export default function DictionaryEntryPanel({
     : -1;
   const activeTabIndex = foundTabIndex >= 0 ? foundTabIndex : 0;
   const activeBlock = tabItems[activeTabIndex]?.block ?? null;
+  const [speaking, setSpeaking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrls = entry.audioUrls ?? [];
+
+  function stopAudio() {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // Ignore media pause failures.
+    } finally {
+      audioRef.current = null;
+    }
+    setSpeaking(false);
+  }
+
+  async function playPronunciation() {
+    const url = audioUrls[0];
+    if (url) {
+      stopAudio();
+      try {
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onplay = () => setSpeaking(true);
+        audio.onended = () => setSpeaking(false);
+        audio.onerror = () => setSpeaking(false);
+        await audio.play();
+        return;
+      } catch {
+        setSpeaking(false);
+      }
+    }
+
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      return;
+    }
+    const word = entry.headword.trim();
+    if (!word) {
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = "en-US";
+    utterance.rate = 0.92;
+    utterance.onstart = () => setSpeaking(true);
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }
+
+  useEffect(() => {
+    return () => {
+      stopAudio();
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   return (
     <section
@@ -226,7 +289,29 @@ export default function DictionaryEntryPanel({
       <div className={`${maxHeightClassName} space-y-3 overflow-y-auto pr-1`}>
         <div className="rounded-lg border border-slate-300 bg-white px-3 py-2">
           <div className="flex items-start justify-between gap-2">
-            <div className="text-xl font-semibold tracking-tight text-slate-900">{entry.headword}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-xl font-semibold tracking-tight text-slate-900">{entry.headword}</div>
+              <button
+                aria-label="Pronounce word"
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${
+                  speaking
+                    ? "border-sky-300 bg-sky-50 text-sky-600"
+                    : "border-slate-300 bg-white text-slate-600 hover:bg-slate-100"
+                }`}
+                onClick={() => void playPronunciation()}
+                title={speaking ? "Speaking..." : "Pronounce"}
+                type="button"
+              >
+                <svg
+                  aria-hidden="true"
+                  className={`h-5 w-5 ${speaking ? "animate-pulse" : ""}`}
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" />
+                </svg>
+              </button>
+            </div>
             <button
               className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
               disabled={!youglishHeadword}

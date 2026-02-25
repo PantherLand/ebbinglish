@@ -1,7 +1,10 @@
 export type FocusWord = {
-  stage: number;
+  consecutivePerfect: number;
+  freezeRounds: number;
+  masteryPhase: number;
   lapseCount: number;
   seenCount: number;
+  isMastered: boolean;
   word: {
     text: string;
     isPriority: boolean;
@@ -28,11 +31,12 @@ export function FocusWordsList({ words }: FocusWordsListProps) {
               <div className="flex items-center justify-between gap-2">
                 <div className="font-medium text-slate-900">{item.word.text}</div>
                 <div className="text-xs text-slate-500">
-                  Stage {item.stage} · Lapses {item.lapseCount}
+                  Phase {item.masteryPhase} · Lapses {item.lapseCount}
                 </div>
               </div>
               <div className="mt-1 text-xs text-slate-500">
-                Seen {item.seenCount}
+                Seen {item.seenCount} · First-known streak {item.consecutivePerfect} · Freeze {item.freezeRounds}
+                {item.isMastered ? " · Mastered" : ""}
                 {item.word.isPriority ? " · Priority" : ""}
               </div>
             </li>
