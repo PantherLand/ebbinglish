@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import YouglishModal from "@/app/components/youglish-modal";
+import YouglishEmbed from "@/app/components/youglish-embed";
 import { generatePracticeStoryAction, submitReviewBatchAction } from "./actions";
 
 type ReviewCard = {
@@ -225,11 +225,11 @@ export default function ReviewSession({
   const [isFinishing, setIsFinishing] = useState(false);
   const [dictInfoByCardId, setDictInfoByCardId] = useState<Record<string, DictCardInfo>>({});
   const [meaningLoadingCardId, setMeaningLoadingCardId] = useState<string | null>(null);
-  const [showYouglish, setShowYouglish] = useState(false);
   const [practiceReadings, setPracticeReadings] = useState<PracticeReading[]>([]);
   const [activePracticeIndex, setActivePracticeIndex] = useState(0);
   const [practiceLoading, setPracticeLoading] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [youglishLoaded, setYouglishLoaded] = useState(false);
 
   const latestRef = useRef<{
     state: SessionState;
@@ -245,6 +245,11 @@ export default function ReviewSession({
   const polishCard = state.phase === "POLISH" ? cardsById.get(state.polishPool[0] ?? "") ?? null : null;
   const current = encounterCard ?? polishCard;
   const currentHeadword = current?.text.trim() || "";
+
+  // Reset YouGlish embed when the card changes
+  useEffect(() => {
+    setYouglishLoaded(false);
+  }, [currentHeadword]);
 
   const currentStoredMeaning = current?.meaning?.trim() || null;
   const currentDictInfo = current ? dictInfoByCardId[current.id] : null;
@@ -1162,19 +1167,6 @@ export default function ReviewSession({
               <div className="mt-3 text-2xl leading-relaxed text-slate-800">
                 {displayedMeaning || "No meaning yet. Add manual meaning in Library."}
               </div>
-              <div className="mt-5">
-                <button
-                  className="rounded-2xl border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                  disabled={!currentHeadword}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setShowYouglish(true);
-                  }}
-                  type="button"
-                >
-                  Open YouGlish
-                </button>
-              </div>
             </>
           ) : (
             <div className="mt-10 text-sm text-slate-500">Tap to reveal meaning</div>
@@ -1211,7 +1203,24 @@ export default function ReviewSession({
         {error ? <p className="text-sm text-rose-700">{error}</p> : null}
       </div>
 
-      {showYouglish ? <YouglishModal headword={currentHeadword} onClose={() => setShowYouglish(false)} /> : null}
+      {state.revealed && currentHeadword ? (
+        youglishLoaded ? (
+          <YouglishEmbed headword={currentHeadword} minHeightClassName="min-h-[340px]" />
+        ) : (
+          <div className="flex justify-center py-1">
+            <button
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700"
+              onClick={() => setYouglishLoaded(true)}
+              type="button"
+            >
+              <svg aria-hidden="true" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <polygon fill="currentColor" points="5,3 19,12 5,21" />
+              </svg>
+              YouGlish
+            </button>
+          </div>
+        )
+      ) : null}
     </section>
   );
 }

@@ -1,6 +1,8 @@
 import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
 import { hasStudyPrismaModels, STUDY_PRISMA_HINT } from "@/src/study-runtime";
+import { getApiTokenStatusAction } from "./api-token-actions";
+import ApiTokenSection from "./api-token-section";
 import SettingsClient from "./settings-client";
 
 export default async function SettingsPage() {
@@ -37,20 +39,28 @@ export default async function SettingsPage() {
     );
   }
 
-  const settings = await prisma.studySettings.upsert({
-    where: { userId: user.id },
-    update: {},
-    create: { userId: user.id },
-  });
+  const [settings, apiTokenStatus] = await Promise.all([
+    prisma.studySettings.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: { userId: user.id },
+    }),
+    getApiTokenStatusAction(),
+  ]);
 
   return (
-    <SettingsClient
-      initialSettings={{
-        sessionSize: settings.sessionSize,
-        freezeRounds: settings.freezeRounds,
-        autoPlayAudio: settings.autoPlayAudio,
-        requireConsecutiveKnown: settings.requireConsecutiveKnown,
-      }}
-    />
+    <div className="space-y-6">
+      <SettingsClient
+        initialSettings={{
+          sessionSize: settings.sessionSize,
+          freezeRounds: settings.freezeRounds,
+          autoPlayAudio: settings.autoPlayAudio,
+          requireConsecutiveKnown: settings.requireConsecutiveKnown,
+        }}
+      />
+      <div className="mx-auto max-w-3xl">
+        <ApiTokenSection initial={apiTokenStatus} />
+      </div>
+    </div>
   );
 }

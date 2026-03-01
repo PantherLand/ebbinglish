@@ -4,7 +4,6 @@ import DictionaryEntryPanel, {
   type DictionaryEntryData,
 } from "@/app/components/dictionary-entry-panel";
 import { auth } from "@/src/auth";
-import { lookupEntryDetail } from "@/src/dict-back-api";
 import { buildHeatmap } from "@/src/memory-heatmap";
 import { getMemoryRating } from "@/src/memory-rating";
 import { prisma } from "@/src/prisma";
@@ -106,10 +105,18 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
   const isMastered = word.reviewState?.isMastered ?? false;
 
   const manualNote = word.note?.trim() || null;
-  let hasDictMeaning = false;
-  let dictPrimaryMeaning: string | null = null;
 
-  let dictionaryEntry: DictionaryEntryData = {
+  // Use the AI-generated entry stored at add-word time, if present.
+  const storedEntry = word.entryJson as DictionaryEntryData | null;
+  const hasDictMeaning = Boolean(
+    storedEntry &&
+      (storedEntry.posBlocks?.length > 0 ||
+        storedEntry.senses?.length > 0 ||
+        storedEntry.meaning?.trim()),
+  );
+  const dictPrimaryMeaning = storedEntry?.meaning?.trim() || null;
+
+  const dictionaryEntry: DictionaryEntryData = storedEntry ?? {
     headword: word.text,
     meaning: manualNote,
     pos: null,
@@ -120,33 +127,6 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
     idioms: [],
     fallbackText: manualNote,
   };
-
-  try {
-    const detail = await lookupEntryDetail(word.text);
-    hasDictMeaning =
-      Boolean(detail.meaning?.trim()) ||
-      Boolean(detail.fallbackText?.trim()) ||
-      detail.posBlocks.length > 0 ||
-      detail.senses.length > 0 ||
-      detail.idioms.length > 0;
-
-    if (hasDictMeaning) {
-      dictPrimaryMeaning = detail.meaning?.trim() || detail.fallbackText?.trim() || null;
-      dictionaryEntry = {
-        headword: detail.headword || word.text,
-        meaning: detail.meaning,
-        pos: detail.pos,
-        pronunciations: detail.pronunciations,
-        audioUrls: detail.audioUrls,
-        posBlocks: detail.posBlocks,
-        senses: detail.senses,
-        idioms: detail.idioms,
-        fallbackText: detail.fallbackText,
-      };
-    }
-  } catch {
-    // Keep detail page usable when dictionary service is unavailable.
-  }
 
   const showManualMeaning =
     Boolean(manualNote) && (!dictPrimaryMeaning || dictPrimaryMeaning !== manualNote);

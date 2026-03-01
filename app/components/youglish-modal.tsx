@@ -18,7 +18,7 @@ export default function YouglishModal({
   const youglishHostId = `yg-host-${widgetId}`;
   const normalizedHeadword = headword.trim();
   const youglishQuery = useMemo(
-    () => encodeURIComponent(normalizedHeadword),
+    () => encodeURIComponent(normalizedHeadword.replace(/\s+/g, " ").trim()),
     [normalizedHeadword],
   );
 
@@ -145,6 +145,7 @@ export default function YouglishModal({
                 data-components="8415"
                 data-lang="english"
                 data-query={youglishQuery}
+                data-zones="all,us,uk,aus"
                 href="https://youglish.com"
                 id={youglishAnchorId}
                 rel="nofollow noopener noreferrer"

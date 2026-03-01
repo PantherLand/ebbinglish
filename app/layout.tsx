@@ -8,11 +8,6 @@ export const metadata: Metadata = {
     template: "%s | ebbinglish",
   },
   description: "ebbinglish vocabulary review with spaced repetition.",
-  icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
-  },
 };
 
 export default function RootLayout({
@@ -21,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning className="antialiased">
         <Providers>{children}</Providers>
       </body>

@@ -25,6 +25,7 @@ const createWordSchema = z.object({
     .max(500, "Note is too long")
     .optional()
     .or(z.literal("")),
+  entryJson: z.string().optional().or(z.literal("")),
 });
 
 const listWordActionSchema = z.object({
@@ -44,6 +45,7 @@ export async function createWordAction(
     text: formData.get("text"),
     language: formData.get("language") ?? "en",
     note: formData.get("note") ?? "",
+    entryJson: formData.get("entryJson") ?? "",
   });
 
   if (!parsed.success) {
@@ -67,8 +69,17 @@ export async function createWordAction(
     return { status: "error", message: "User not found" };
   }
 
-  const { text, language, note } = parsed.data;
+  const { text, language, note, entryJson } = parsed.data;
   const finalNote = note || null;
+
+  let parsedEntryJson: unknown = null;
+  if (entryJson) {
+    try {
+      parsedEntryJson = JSON.parse(entryJson);
+    } catch {
+      // Ignore malformed JSON — save word without entry
+    }
+  }
 
   try {
     await prisma.word.create({
@@ -77,6 +88,7 @@ export async function createWordAction(
         text,
         language,
         note: finalNote,
+        entryJson: parsedEntryJson ?? undefined,
         reviewState: {
           create: {
             userId: user.id,

@@ -7,16 +7,18 @@ import NProgress from "nprogress";
 const ROUTE_BOUNDARY_EVENT = "ebbinglish:route-boundary";
 const MIN_VISIBLE_MS = 420;
 const MAX_VISIBLE_MS = 12000;
+const ROUTE_KEY_FINISH_FALLBACK_MS = 1600;
 const MAX_PENDING_PROGRESS = 0.5;
 const FINISH_STAGE_ONE_MS = 120;
 const FINISH_STAGE_TWO_MS = 130;
 const DEFAULT_PROGRESS_COLOR = "#4f46e5";
-let boundaryCount = 0;
+let routeBoundaryActive = false;
 let navigationPending = false;
 let startedAt = 0;
 let hideTimer: number | null = null;
 let finishStageOneTimer: number | null = null;
 let finishStageTwoTimer: number | null = null;
+let routeKeyFallbackTimer: number | null = null;
 let maxTimer: number | null = null;
 let isFinishing = false;
 
@@ -51,6 +53,10 @@ function clearTimers() {
     window.clearTimeout(finishStageTwoTimer);
     finishStageTwoTimer = null;
   }
+  if (routeKeyFallbackTimer) {
+    window.clearTimeout(routeKeyFallbackTimer);
+    routeKeyFallbackTimer = null;
+  }
   if (maxTimer) {
     window.clearTimeout(maxTimer);
     maxTimer = null;
@@ -68,7 +74,7 @@ function startBar() {
   NProgress.set(MAX_PENDING_PROGRESS);
   applyBrandProgressStyles();
   maxTimer = window.setTimeout(() => {
-    boundaryCount = 0;
+    routeBoundaryActive = false;
     navigationPending = false;
     isFinishing = false;
     NProgress.done(true);
@@ -76,7 +82,7 @@ function startBar() {
 }
 
 function tryFinishBar() {
-  if (boundaryCount > 0 || navigationPending || NProgress.status === null || isFinishing) {
+  if (routeBoundaryActive || navigationPending || NProgress.status === null || isFinishing) {
     return;
   }
   isFinishing = true;
@@ -116,6 +122,17 @@ export default function TopProgressController() {
   useEffect(() => {
     navigationPending = false;
     tryFinishBar();
+    if (routeKeyFallbackTimer) {
+      window.clearTimeout(routeKeyFallbackTimer);
+    }
+    routeKeyFallbackTimer = window.setTimeout(() => {
+      if (NProgress.status === null) {
+        return;
+      }
+      routeBoundaryActive = false;
+      navigationPending = false;
+      tryFinishBar();
+    }, ROUTE_KEY_FINISH_FALLBACK_MS);
   }, [routeKey]);
 
   useEffect(() => {
@@ -172,12 +189,12 @@ export default function TopProgressController() {
       const customEvent = event as CustomEvent<{ phase?: string }>;
       const phase = customEvent.detail?.phase;
       if (phase === "start") {
-        boundaryCount += 1;
+        routeBoundaryActive = true;
         startBar();
         return;
       }
       if (phase === "end") {
-        boundaryCount = Math.max(boundaryCount - 1, 0);
+        routeBoundaryActive = false;
         tryFinishBar();
       }
     };
@@ -195,6 +212,10 @@ export default function TopProgressController() {
       document.removeEventListener("click", onClickCapture, true);
       window.removeEventListener("popstate", onPopState);
       window.removeEventListener(ROUTE_BOUNDARY_EVENT, onRouteBoundary as EventListener);
+      if (routeKeyFallbackTimer) {
+        window.clearTimeout(routeKeyFallbackTimer);
+        routeKeyFallbackTimer = null;
+      }
       clearTimers();
       NProgress.done(true);
     };

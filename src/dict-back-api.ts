@@ -21,7 +21,7 @@ type DictEntryResponse = {
 type DictConfig = {
   baseUrl: string;
   dictId: string;
-  apiKey?: string;
+  apiKey: string;
 };
 
 export type DictEntryExample = {
@@ -156,6 +156,10 @@ function getConfig(): DictConfig | null {
   if (!service) {
     return null;
   }
+  const apiKey = process.env.DICT_BACK_API_KEY?.trim();
+  if (!apiKey) {
+    return null;
+  }
 
   const trimmed = service.replace(/\/+$/, "");
   const baseUrl = trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
@@ -163,7 +167,7 @@ function getConfig(): DictConfig | null {
   return {
     baseUrl,
     dictId: process.env.DICT_BACK_API_DICT_ID?.trim() || DEFAULT_DICT_ID,
-    apiKey: process.env.DICT_BACK_API_KEY?.trim() || undefined,
+    apiKey,
   };
 }
 
@@ -810,11 +814,8 @@ async function requestDictWithConfig(
 
   const headers: Record<string, string> = {
     accept: "application/json",
+    Authorization: `Bearer ${config.apiKey}`,
   };
-
-  if (config.apiKey) {
-    headers.authorization = `Bearer ${config.apiKey}`;
-  }
 
   const response = await fetch(url.toString(), {
     method: "GET",

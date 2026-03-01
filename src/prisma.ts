@@ -12,7 +12,9 @@ function hasStudyDelegates(client: PrismaClient): boolean {
     typeof raw.studyRound === "object" &&
     raw.studyRound !== null &&
     typeof raw.studySession === "object" &&
-    raw.studySession !== null
+    raw.studySession !== null &&
+    typeof raw.apiToken === "object" &&
+    raw.apiToken !== null
   );
 }
 

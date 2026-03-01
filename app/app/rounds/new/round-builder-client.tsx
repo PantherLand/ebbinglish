@@ -14,7 +14,7 @@ type BuilderWord = {
   status: "new" | "seen" | "fuzzy" | "unknown" | "mastered" | "frozen";
 };
 
-type FilterMode = "all" | "new" | "seen";
+type FilterMode = "all" | "new" | "learning" | "frozen";
 type PriorityFilterMode = "all" | "priority" | "normal";
 
 function statusChipClass(status: BuilderWord["status"]): string {
@@ -71,10 +71,10 @@ export default function RoundBuilderClient({ words }: { words: BuilderWord[] }) 
       if (filterMode === "new" && word.status !== "new") {
         return false;
       }
-      if (
-        filterMode === "seen" &&
-        (word.status === "new" || word.status === "mastered")
-      ) {
+      if (filterMode === "learning" && !["seen", "fuzzy", "unknown"].includes(word.status)) {
+        return false;
+      }
+      if (filterMode === "frozen" && word.status !== "frozen") {
         return false;
       }
       if (priorityFilterMode === "priority" && !word.isPriority) {
@@ -187,7 +187,8 @@ export default function RoundBuilderClient({ words }: { words: BuilderWord[] }) 
               >
                 <option value="all">All Available</option>
                 <option value="new">New Only</option>
-                <option value="seen">Seen / Learning</option>
+                <option value="learning">Learning</option>
+                <option value="frozen">Frozen</option>
               </select>
               <select
                 className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"

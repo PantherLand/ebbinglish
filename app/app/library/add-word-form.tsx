@@ -7,11 +7,6 @@ import DictionaryEntryPanel, {
 } from "@/app/components/dictionary-entry-panel";
 import { createWordAction, type CreateWordState } from "./actions";
 
-type DictSuggestItem = {
-  headword: string;
-  score: number;
-};
-
 type DictMeaningPayload = {
   headword?: string;
   meaning?: string | null;
@@ -26,41 +21,33 @@ type DictMeaningPayload = {
   error?: string;
 };
 
-const initialState: CreateWordState = {
-  status: "idle",
-};
+const initialState: CreateWordState = { status: "idle" };
 
-type AddWordFormProps = {
-  className?: string;
-};
+type AddWordFormProps = { className?: string };
 
 export default function AddWordForm({ className }: AddWordFormProps) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
-  const suggestAbortRef = useRef<AbortController | null>(null);
   const checkAbortRef = useRef<AbortController | null>(null);
-  const [state, formAction, pending] = useActionState(
-    createWordAction,
-    initialState,
-  );
+  const [state, formAction, pending] = useActionState(createWordAction, initialState);
 
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
+  const [entryJsonStr, setEntryJsonStr] = useState("");
   const [selectedHeadword, setSelectedHeadword] = useState("");
   const [entryDetail, setEntryDetail] = useState<DictionaryEntryData | null>(null);
-
-  const [suggestions, setSuggestions] = useState<DictSuggestItem[]>([]);
-  const [suggesting, setSuggesting] = useState(false);
   const [fillingMeaning, setFillingMeaning] = useState(false);
-
   const [dictDisabled, setDictDisabled] = useState(false);
   const [dictError, setDictError] = useState<string | null>(null);
   const [meaningHint, setMeaningHint] = useState<string | null>(null);
   const [alreadyAdded, setAlreadyAdded] = useState(false);
   const [checkingAdded, setCheckingAdded] = useState(false);
-  const [inputCommitted, setInputCommitted] = useState(false);
   const [manualMeaningMode, setManualMeaningMode] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
+
+  useEffect(() => {
+    setEntryJsonStr(entryDetail ? JSON.stringify(entryDetail) : "");
+  }, [entryDetail]);
 
   useEffect(() => {
     if (state.status === "success") {
@@ -68,94 +55,17 @@ export default function AddWordForm({ className }: AddWordFormProps) {
       setJustAdded(true);
       setText("");
       setNote("");
+      setEntryJsonStr("");
       setSelectedHeadword("");
       setEntryDetail(null);
-      setSuggestions([]);
       setMeaningHint(null);
       setDictError(null);
       setAlreadyAdded(false);
       setCheckingAdded(false);
-      setInputCommitted(false);
       setManualMeaningMode(false);
       router.refresh();
     }
   }, [router, state.status]);
-
-  useEffect(() => {
-    const q = text.trim();
-
-    if (q.length < 2 || inputCommitted) {
-      suggestAbortRef.current?.abort();
-      setSuggestions([]);
-      setSuggesting(false);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      suggestAbortRef.current?.abort();
-      const controller = new AbortController();
-      suggestAbortRef.current = controller;
-
-      setSuggesting(true);
-      setDictError(null);
-
-      try {
-        const response = await fetch(
-          `/api/dict/suggest?q=${encodeURIComponent(q)}&limit=8`,
-          {
-            method: "GET",
-            signal: controller.signal,
-          },
-        );
-
-        const payload = (await response.json()) as {
-          items?: DictSuggestItem[];
-          disabled?: boolean;
-          error?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(payload.error || "Suggestion request failed");
-        }
-
-        if (payload.disabled) {
-          setDictDisabled(true);
-          setSuggestions([]);
-          return;
-        }
-
-        setDictDisabled(false);
-
-        const unique = new Map<string, DictSuggestItem>();
-        for (const item of payload.items ?? []) {
-          const normalized = item.headword.trim().toLowerCase();
-          if (!normalized) {
-            continue;
-          }
-          const existing = unique.get(normalized);
-          if (!existing || item.score > existing.score) {
-            unique.set(normalized, item);
-          }
-        }
-
-        setSuggestions(Array.from(unique.values()));
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setSuggestions([]);
-        setDictError(error instanceof Error ? error.message : "Failed to search word");
-      } finally {
-        setSuggesting(false);
-      }
-    }, 280);
-
-    return () => {
-      clearTimeout(timer);
-      suggestAbortRef.current?.abort();
-    };
-  }, [inputCommitted, text]);
 
   const handleWordInput = (value: string) => {
     setText(value);
@@ -164,14 +74,14 @@ export default function AddWordForm({ className }: AddWordFormProps) {
     setNote("");
     setEntryDetail(null);
     setMeaningHint(null);
+    setDictError(null);
     setAlreadyAdded(false);
-    setInputCommitted(false);
     setManualMeaningMode(false);
   };
 
+  // Duplicate-check effect
   useEffect(() => {
     const q = text.trim();
-
     if (!q) {
       setAlreadyAdded(false);
       setCheckingAdded(false);
@@ -183,58 +93,35 @@ export default function AddWordForm({ className }: AddWordFormProps) {
       const controller = new AbortController();
       checkAbortRef.current = controller;
       setCheckingAdded(true);
-
       try {
         const response = await fetch(
           `/api/library/check?text=${encodeURIComponent(q)}&language=en`,
-          {
-            method: "GET",
-            signal: controller.signal,
-          },
+          { method: "GET", signal: controller.signal },
         );
-
-        if (!response.ok) {
-          setAlreadyAdded(false);
-          return;
-        }
-
+        if (!response.ok) { setAlreadyAdded(false); return; }
         const payload = (await response.json()) as { exists?: boolean };
         setAlreadyAdded(Boolean(payload.exists));
       } catch {
-        if (!controller.signal.aborted) {
-          setAlreadyAdded(false);
-        }
+        if (!controller.signal.aborted) setAlreadyAdded(false);
       } finally {
-        if (!controller.signal.aborted) {
-          setCheckingAdded(false);
-        }
+        if (!controller.signal.aborted) setCheckingAdded(false);
       }
     }, 240);
 
     return () => clearTimeout(timer);
   }, [text]);
 
-  const selectHeadword = async (
-    headword: string,
-    options?: { preserveInputText?: boolean; commitInput?: boolean },
-  ) => {
+  const fetchMeaning = async (headword: string) => {
     const query = headword.trim();
-    if (!query) {
-      return;
-    }
-
-    if (options?.commitInput) {
-      suggestAbortRef.current?.abort();
-      setInputCommitted(true);
-      setSuggestions([]);
-      setSuggesting(false);
-    }
+    if (!query) return;
 
     setFillingMeaning(true);
     setJustAdded(false);
     setDictError(null);
     setMeaningHint(null);
     setManualMeaningMode(false);
+    setEntryDetail(null);
+    setSelectedHeadword("");
 
     try {
       const response = await fetch(
@@ -245,45 +132,37 @@ export default function AddWordForm({ className }: AddWordFormProps) {
       const payload = (await response.json()) as DictMeaningPayload;
 
       if (!response.ok) {
-        throw new Error(payload.error || "Meaning request failed");
+        throw new Error(payload.error || `AI lookup failed (${response.status})`);
       }
 
       if (payload.disabled) {
         setDictDisabled(true);
-        setMeaningHint("Dictionary API is not configured yet");
+        setText(query);
+        setSelectedHeadword(query);
+        setManualMeaningMode(true);
         return;
       }
 
       setDictDisabled(false);
 
       const normalizedHeadword = payload.headword?.trim() || query;
-      const meaning = payload.meaning?.trim() || "";
-      const finalText = options?.preserveInputText ? query : normalizedHeadword;
       const hasStructuredContent =
         (payload.posBlocks?.length ?? 0) > 0 ||
         (payload.senses?.length ?? 0) > 0 ||
         (payload.idioms?.length ?? 0) > 0 ||
         Boolean(payload.fallbackText?.trim());
-      const foundFromDict = Boolean(meaning) || hasStructuredContent;
+      const foundFromDict = Boolean(payload.meaning?.trim()) || hasStructuredContent;
 
-      if (!foundFromDict && options?.commitInput) {
-        setText(query);
-        setSelectedHeadword(query);
-        setNote("");
-        setSuggestions([]);
-        setInputCommitted(true);
-        setEntryDetail(null);
+      setText(normalizedHeadword);
+      setSelectedHeadword(normalizedHeadword);
+      setNote("");
+
+      if (!foundFromDict) {
         setManualMeaningMode(true);
-        setMeaningHint("无该单词释义，可由用户自行输入meaning");
+        setMeaningHint("AI 未找到释义，请手动输入 meaning");
         return;
       }
 
-      setText(finalText);
-      setSelectedHeadword(finalText);
-      setNote("");
-      setManualMeaningMode(false);
-      setSuggestions([]);
-      setInputCommitted(Boolean(options?.commitInput));
       setEntryDetail({
         headword: normalizedHeadword,
         meaning: payload.meaning || null,
@@ -295,32 +174,15 @@ export default function AddWordForm({ className }: AddWordFormProps) {
         idioms: payload.idioms ?? [],
         fallbackText: payload.fallbackText || null,
       });
-
-      setMeaningHint(
-        foundFromDict
-          ? `已获取字典释义：${normalizedHeadword}（加入时不单独存储释义）`
-          : "未找到明确释义，加入后可在详情页补充",
-      );
+      setMeaningHint(`已获取 AI 释义：${normalizedHeadword}（释义将随单词一同存储）`);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to fetch meaning";
-
-      if (
-        options?.commitInput &&
-        /(404|not found|no entry|no match|不存在|未找到|找不到)/i.test(message)
-      ) {
-        setText(query);
-        setSelectedHeadword(query);
-        setNote("");
-        setSuggestions([]);
-        setInputCommitted(true);
-        setEntryDetail(null);
-        setManualMeaningMode(true);
-        setMeaningHint("无该单词释义，可由用户自行输入meaning");
-        setDictError(null);
-      } else {
-        setDictError(message);
-      }
+      const message = error instanceof Error ? error.message : "Failed to fetch meaning";
+      // Show the error and fall back to manual mode so the user can still add the word
+      setDictError(message);
+      setText(query);
+      setSelectedHeadword(query);
+      setManualMeaningMode(true);
+      setMeaningHint("AI 释义获取失败，可手动输入 meaning");
     } finally {
       setFillingMeaning(false);
     }
@@ -332,7 +194,8 @@ export default function AddWordForm({ className }: AddWordFormProps) {
     !fillingMeaning &&
     !alreadyAdded &&
     !justAdded &&
-    (dictDisabled || Boolean(selectedHeadword));
+    Boolean(selectedHeadword);
+  const submitLabel = pending ? "Adding..." : alreadyAdded || justAdded ? "Added" : "Add to list";
 
   return (
     <form
@@ -351,17 +214,8 @@ export default function AddWordForm({ className }: AddWordFormProps) {
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              if (!text.trim() || fillingMeaning) {
-                return;
-              }
-              suggestAbortRef.current?.abort();
-              setInputCommitted(true);
-              setSuggestions([]);
-              setSuggesting(false);
-              void selectHeadword(text, {
-                preserveInputText: true,
-                commitInput: true,
-              });
+              if (!text.trim() || fillingMeaning) return;
+              void fetchMeaning(text);
             }
           }}
           placeholder="输入单词，例如 available"
@@ -369,39 +223,16 @@ export default function AddWordForm({ className }: AddWordFormProps) {
           maxLength={100}
           value={text}
         />
-        <p className="text-xs text-slate-500">
-          输入后按 Enter：将按你的输入精确查询，并隐藏模糊候选。
-        </p>
+        <p className="text-xs text-slate-500">按 Enter 查询 AI 释义后再加入</p>
       </label>
 
       <input name="language" type="hidden" value="en" />
       <input name="note" type="hidden" value={note} />
+      <input name="entryJson" type="hidden" value={entryJsonStr} />
 
-      {suggesting ? <p className="text-xs text-gray-500">正在搜索候选词...</p> : null}
-
-      {suggestions.length > 0 && !inputCommitted ? (
-        <ul className="max-h-44 divide-y overflow-auto rounded-md border border-slate-300 bg-white text-sm shadow-sm">
-          {suggestions.map((item) => (
-            <li key={item.headword}>
-              <button
-                className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-slate-50"
-                onClick={() =>
-                  void selectHeadword(item.headword, {
-                    preserveInputText: false,
-                    commitInput: true,
-                  })
-                }
-                type="button"
-              >
-                <span>{item.headword}</span>
-                <span className="text-xs text-gray-500">{item.score.toFixed(2)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {fillingMeaning ? (
+        <p className="text-xs text-gray-500">正在获取 AI 释义...</p>
       ) : null}
-
-      {fillingMeaning ? <p className="text-xs text-gray-500">正在获取释义...</p> : null}
 
       {entryDetail ? (
         <DictionaryEntryPanel
@@ -418,27 +249,29 @@ export default function AddWordForm({ className }: AddWordFormProps) {
             className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-600 focus:outline-none"
             maxLength={500}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="无该单词释义，可由用户自行输入meaning"
+            placeholder="请输入单词释义"
             value={note}
           />
         </label>
       ) : null}
 
-      {meaningHint ? <p className="text-xs text-gray-600">{meaningHint}</p> : null}
+      {meaningHint && !dictError ? (
+        <p className="text-xs text-gray-600">{meaningHint}</p>
+      ) : null}
       {dictError ? <p className="text-xs text-red-700">{dictError}</p> : null}
-      {checkingAdded ? <p className="text-xs text-gray-500">检查是否已加入...</p> : null}
+      {checkingAdded ? (
+        <p className="text-xs text-gray-500">检查是否已加入...</p>
+      ) : null}
       {alreadyAdded ? (
         <p className="text-xs text-amber-700">该单词已在你的背诵 cards 中。</p>
       ) : null}
       {dictDisabled ? (
         <p className="text-xs text-amber-700">
-          Dictionary API disabled. Set `DICT_BACK_API` in `.env` first.
+          AI lookup is not configured. Set OPENROUTER_API_KEY in .env to enable automatic definitions.
         </p>
       ) : null}
-      {!dictDisabled && text.trim() && !selectedHeadword ? (
-        <p className="text-xs text-gray-500">
-          请选择候选词，或按 Enter 以当前输入词直接查询后再加入。
-        </p>
+      {!selectedHeadword && !fillingMeaning && text.trim() ? (
+        <p className="text-xs text-gray-500">按 Enter 查询 AI 释义后再加入。</p>
       ) : null}
 
       <button
@@ -446,7 +279,7 @@ export default function AddWordForm({ className }: AddWordFormProps) {
         disabled={!canSubmit}
         type="submit"
       >
-        {pending ? "Adding..." : alreadyAdded || justAdded ? "已加入" : "加入背诵 cards"}
+        {submitLabel}
       </button>
 
       {state.status !== "idle" ? (

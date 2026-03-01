@@ -5,6 +5,7 @@ import { loadWordsWithStatus } from "@/src/study-queries";
 import { DeleteWordButton } from "./delete-word-button";
 import AddWordModalTrigger from "./add-word-modal-trigger";
 import LibraryFilters from "./library-filters";
+import LibraryRefreshButton from "./library-refresh-button";
 import { togglePriorityFromListAction } from "./actions";
 
 type StatusFilter =
@@ -159,7 +160,10 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
 
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-900">Your cards</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-slate-900">Your cards</h2>
+            <LibraryRefreshButton />
+          </div>
           <span className="text-base text-slate-500">
             {filteredWords.length} / {words.length}
           </span>

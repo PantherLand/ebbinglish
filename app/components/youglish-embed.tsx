@@ -18,7 +18,10 @@ export default function YouglishEmbed({
   const hostId = `yg-embed-host-${widgetId}`;
   const anchorId = `yg-embed-widget-${widgetId}`;
   const query = headword.trim();
-  const encodedQuery = useMemo(() => encodeURIComponent(query), [query]);
+  const encodedQuery = useMemo(
+    () => encodeURIComponent(query.replace(/\s+/g, " ").trim()),
+    [query],
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +29,7 @@ export default function YouglishEmbed({
       return;
     }
 
-    setLoading(true);
+    const startLoadingTimer = window.setTimeout(() => setLoading(true), 0);
     const scriptId = `youglish-embed-script-${widgetId}`;
     const existing = document.getElementById(scriptId);
     if (existing) {
@@ -70,6 +73,7 @@ export default function YouglishEmbed({
     const fallbackTimer = window.setTimeout(() => setLoading(false), 10000);
 
     return () => {
+      window.clearTimeout(startLoadingTimer);
       observer?.disconnect();
       window.clearTimeout(fallbackTimer);
       script.remove();
@@ -99,6 +103,7 @@ export default function YouglishEmbed({
           data-components="8415"
           data-lang="english"
           data-query={encodedQuery}
+          data-zones="all,us,uk,aus"
           href="https://youglish.com"
           id={anchorId}
           rel="nofollow noopener noreferrer"
