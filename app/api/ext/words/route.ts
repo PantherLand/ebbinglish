@@ -60,6 +60,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (existing) {
+      await prisma.word.update({
+        where: { id: existing.id },
+        data: { note: meaning },
+      });
       wordId = existing.id;
       created = false;
     } else {

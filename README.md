@@ -85,7 +85,25 @@ Ebbinglish 是一个基于 **Round（学习轮次）** 的英文单词复习应�
 - 返回：`{ exists: boolean }`
 - 未登录返回 `401`
 
-### 4) Auth.js
+### 4) Chrome Extension / External API
+
+- `POST /api/ext/words`
+- 需要 `Authorization: Bearer <token>`（在 Settings → API Token 中生成）
+- 请求体：
+  ```json
+  { "word": "ephemeral", "meaning": "lasting for a very short time", "language": "en" }
+  ```
+  - `word`：必填，最长 100 字符
+  - `meaning`：必填，最长 500 字符（保存为单词的 `note`）
+  - `language`：可选，默认 `"en"`
+- 返回：
+  - 成功（新建）：`{ "ok": true, "wordId": "...", "created": true }`
+  - 成功（已存在，更新 meaning）：`{ "ok": true, "wordId": "...", "created": false }`
+  - Token 缺失或无效：`401` + `{ "ok": false, "error": "..." }`
+  - 参数非法：`422` + `{ "ok": false, "error": "..." }`
+  - 幂等性：按 `userId + language + word` 去重，重复调用只更新 `meaning`，不重复创建
+
+### 5) Auth.js
 
 - `GET/POST /api/auth/[...nextauth]`
 - 由 Auth.js handlers 提供
