@@ -1,0 +1,2 @@
+ALTER TABLE "Word"
+ADD COLUMN "entryJson" JSONB;
