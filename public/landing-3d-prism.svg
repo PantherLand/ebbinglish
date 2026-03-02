@@ -1,0 +1,35 @@
+<svg width="520" height="520" viewBox="0 0 520 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="faceA" x1="132" y1="133" x2="366" y2="402" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4F7FF"/>
+      <stop offset="0.34" stop-color="#B7D2FF"/>
+      <stop offset="1" stop-color="#5A72F7"/>
+    </linearGradient>
+    <linearGradient id="faceB" x1="259" y1="98" x2="415" y2="384" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF8"/>
+      <stop offset="0.4" stop-color="#FFE589"/>
+      <stop offset="1" stop-color="#F0B61F"/>
+    </linearGradient>
+    <linearGradient id="faceC" x1="104" y1="286" x2="301" y2="428" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CFF8FF"/>
+      <stop offset="1" stop-color="#4CD0F7"/>
+    </linearGradient>
+    <linearGradient id="edgeGlow" x1="177" y1="122" x2="379" y2="393" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.88"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.2"/>
+    </linearGradient>
+    <filter id="prismShadow" x="36" y="326" width="448" height="124" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="26"/>
+    </filter>
+  </defs>
+  <g opacity="0.32" filter="url(#prismShadow)">
+    <ellipse cx="260" cy="388" rx="172" ry="20" fill="#2C3F95"/>
+  </g>
+  <path d="M170 117L298 90L405 176L322 360L165 381L101 247L170 117Z" fill="url(#faceA)"/>
+  <path d="M298 90L433 161L352 333L322 360L405 176L298 90Z" fill="url(#faceB)"/>
+  <path d="M101 247L165 381L322 360L205 430L88 306L101 247Z" fill="url(#faceC)"/>
+  <path d="M170 117L298 90L405 176M170 117L101 247M170 117L254 225M405 176L322 360M101 247L165 381M322 360L165 381M322 360L254 225M254 225L101 247" stroke="url(#edgeGlow)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity="0.72"/>
+  <path d="M205 430L165 381L322 360" stroke="#FFFFFF" stroke-opacity="0.46" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="334" cy="156" r="24" fill="#FFFFFF" fill-opacity="0.56"/>
+  <circle cx="205" cy="174" r="16" fill="#FFFFFF" fill-opacity="0.44"/>
+</svg>

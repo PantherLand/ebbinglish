@@ -257,9 +257,31 @@ export default async function LandingPage() {
       <section className="relative overflow-hidden">
         {/* Background decoration */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/90 via-white/30 to-transparent" />
           <div className="absolute -right-32 -top-32 h-[500px] w-[500px] rounded-full bg-indigo-100/60 blur-3xl" />
           <div className="absolute -left-24 top-1/3 h-[400px] w-[400px] rounded-full bg-purple-100/50 blur-3xl" />
           <div className="absolute bottom-0 right-1/4 h-[300px] w-[300px] rounded-full bg-cyan-100/40 blur-3xl" />
+          <Image
+            alt=""
+            className="landing-float-gentle absolute -left-20 top-24 w-52 opacity-80 sm:w-72"
+            height={480}
+            src="/landing-3d-orb.svg"
+            width={480}
+          />
+          <Image
+            alt=""
+            className="landing-float-drift absolute -right-14 top-16 hidden w-56 opacity-90 sm:block md:w-80"
+            height={520}
+            src="/landing-3d-prism.svg"
+            width={520}
+          />
+          <Image
+            alt=""
+            className="landing-float-drift absolute bottom-16 left-1/2 hidden w-32 -translate-x-[26rem] opacity-75 lg:block"
+            height={520}
+            src="/landing-3d-prism.svg"
+            width={520}
+          />
         </div>
 
         <div className="relative mx-auto max-w-6xl px-6 pb-20 pt-20 sm:pb-28 sm:pt-28">
@@ -338,6 +360,20 @@ export default async function LandingPage() {
 
           {/* Hero visual: abstract app preview */}
           <div className="landing-fade-in-slow relative mx-auto mt-16 max-w-4xl">
+            <Image
+              alt=""
+              className="landing-float-gentle pointer-events-none absolute -left-10 -top-14 z-10 hidden w-24 opacity-95 sm:block"
+              height={480}
+              src="/landing-3d-orb.svg"
+              width={480}
+            />
+            <Image
+              alt=""
+              className="landing-float-drift pointer-events-none absolute -right-8 bottom-8 z-10 hidden w-28 opacity-95 md:block"
+              height={520}
+              src="/landing-3d-prism.svg"
+              width={520}
+            />
             <div className="rounded-3xl border border-slate-200/80 bg-white/70 p-2 shadow-2xl shadow-slate-900/10 backdrop-blur-sm">
               <div className="overflow-hidden rounded-2xl border border-slate-100 bg-gradient-to-br from-slate-50 to-white">
                 {/* Mock app header */}
@@ -394,6 +430,7 @@ export default async function LandingPage() {
             </div>
             {/* Shadow glow */}
             <div className="pointer-events-none absolute -inset-4 -z-10 rounded-[2rem] bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-cyan-500/10 blur-2xl" />
+            <div className="pointer-events-none absolute inset-10 -z-10 rounded-[2.5rem] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.85),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(103,232,249,0.18),transparent_30%)]" />
           </div>
         </div>
       </section>

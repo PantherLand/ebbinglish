@@ -79,6 +79,26 @@ body {
   }
 }
 
+@keyframes landing-float-gentle {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0) rotate(2deg);
+  }
+}
+
+@keyframes landing-float-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, 12px, 0) rotate(-2deg);
+  }
+}
+
 .landing-fade-in {
   animation: landing-fade-in 0.7s ease-out both;
 }
@@ -101,4 +121,12 @@ body {
 
 .landing-fade-in-slow {
   animation: landing-fade-in 1s ease-out 0.5s both;
+}
+
+.landing-float-gentle {
+  animation: landing-float-gentle 9s ease-in-out infinite;
+}
+
+.landing-float-drift {
+  animation: landing-float-drift 11s ease-in-out infinite;
 }
