@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import Providers from "@/app/providers";
 import "./globals.css";
 
@@ -56,6 +57,9 @@ export const metadata: Metadata = {
   },
 };
 
+const googleAnalyticsId =
+  process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() || "G-NFDG9LVT1K";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -64,6 +68,22 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning className="antialiased">
+        {googleAnalyticsId ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${googleAnalyticsId}');
+              `}
+            </Script>
+          </>
+        ) : null}
         <Providers>{children}</Providers>
       </body>
     </html>
