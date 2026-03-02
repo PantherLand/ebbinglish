@@ -10,6 +10,18 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  openGraph: {
+    title: "Ebbinglish: English Vocabulary App with Spaced Repetition & YouGlish",
+    description:
+      "Build your English vocabulary faster with round-based spaced repetition, real YouGlish pronunciation examples, and AI-powered dictionary lookups.",
+    url: "/",
+    type: "website",
+  },
+  twitter: {
+    title: "Ebbinglish: English Vocabulary App with Spaced Repetition & YouGlish",
+    description:
+      "Build your English vocabulary faster with round-based spaced repetition, real YouGlish pronunciation examples, and AI-powered dictionary lookups.",
+  },
 };
 
 export default async function Home() {
