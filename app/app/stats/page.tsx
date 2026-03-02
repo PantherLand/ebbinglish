@@ -187,25 +187,29 @@ export default async function StatsPage() {
 
         <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="mb-6 text-base font-bold text-gray-900">Words Reviewed (Last 7 Days)</h2>
-          <div className="flex h-64 items-end justify-between gap-3 rounded-lg bg-slate-50 p-4">
-            {sessionData.map((item) => {
-              const height = item.words > 0 ? Math.max((item.words / maxWords) * 100, 10) : 6;
-              return (
-                <div className="flex flex-1 flex-col items-center gap-2" key={item.key}>
-                  <div className="text-[11px] text-slate-500">{item.words}</div>
-                  <div className="flex h-full w-full items-end">
-                    <div
-                      className="w-full rounded-t-md bg-indigo-600"
-                      style={{ height: `${height}%` }}
-                      title={`${item.date.toLocaleDateString()}: ${item.words} words`}
-                    />
+          <div className="rounded-lg bg-slate-50 p-4">
+            <div className="grid grid-cols-7 gap-3">
+              {sessionData.map((item) => {
+                const height = item.words > 0 ? Math.max((item.words / maxWords) * 100, 10) : 6;
+                return (
+                  <div className="flex flex-col items-center gap-2" key={item.key}>
+                    <div className="text-[11px] text-slate-500">{item.words}</div>
+                    <div className="flex h-40 w-full items-end justify-center">
+                      <div
+                        className={`w-full max-w-10 rounded-t-md transition-all ${
+                          item.words > 0 ? "bg-indigo-600" : "bg-slate-200"
+                        }`}
+                        style={{ height: `${height}%` }}
+                        title={`${item.date.toLocaleDateString()}: ${item.words} words`}
+                      />
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {item.date.toLocaleDateString(undefined, { weekday: "short" })}
+                    </div>
                   </div>
-                  <div className="text-[11px] text-slate-500">
-                    {item.date.toLocaleDateString(undefined, { weekday: "short" })}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </article>
       </section>
