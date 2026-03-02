@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
-import { loadWordsWithStatus } from "@/src/study-queries";
+import { loadLibraryWordPage } from "@/src/study-queries";
 import { DeleteWordButton } from "./delete-word-button";
 import AddWordModalTrigger from "./add-word-modal-trigger";
 import LibraryFilters from "./library-filters";
@@ -63,7 +63,7 @@ type LibraryPageProps = {
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const { q, status, tag, page } = await searchParams;
   const selectedStatus = parseStatusFilter(status);
-  const keyword = q?.trim().toLowerCase() ?? "";
+  const keyword = q?.trim() ?? "";
   const currentPage = parsePage(page);
   const session = await auth();
   const email = session?.user?.email;
@@ -90,36 +90,33 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
     );
   }
 
-  const words = await loadWordsWithStatus(user.id);
-  const availableTags = Array.from(
-    new Set(
-      words
-        .map((word) => word.manualCategory?.trim())
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
+  const [rawTagOptions, totalWordCount] = await Promise.all([
+    prisma.word.findMany({
+      where: {
+        userId: user.id,
+        manualCategory: { not: null },
+      },
+      select: { manualCategory: true },
+      distinct: ["manualCategory"],
+    }),
+    prisma.word.count({
+      where: { userId: user.id },
+    }),
+  ]);
+  const availableTags = rawTagOptions
+    .map((item) => item.manualCategory?.trim() || "")
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => a.localeCompare(b));
   const selectedTagRaw = tag?.trim() || "";
   const selectedTag = availableTags.includes(selectedTagRaw) ? selectedTagRaw : "";
-
-  const filteredWords = words.filter((word) => {
-    const matchKeyword =
-      keyword.length === 0 ||
-      word.text.toLowerCase().includes(keyword) ||
-      (word.note ?? "").toLowerCase().includes(keyword);
-    if (!matchKeyword) return false;
-
-    if (selectedTag && (word.manualCategory?.trim() || "") !== selectedTag) return false;
-
-    if (selectedStatus === "all") return true;
-    if (selectedStatus === "priority") return word.isPriority;
-    if (selectedStatus === "normal") return !word.isPriority;
-    return word.status === selectedStatus;
+  const { filteredCount, pageWords, safePage, totalPages } = await loadLibraryWordPage({
+    userId: user.id,
+    keyword,
+    selectedTag,
+    selectedStatus,
+    currentPage,
+    pageSize: PAGE_SIZE,
   });
-
-  const totalPages = Math.max(1, Math.ceil(filteredWords.length / PAGE_SIZE));
-  const safePage = Math.min(currentPage, totalPages);
-  const pageStart = (safePage - 1) * PAGE_SIZE;
-  const pageWords = filteredWords.slice(pageStart, pageStart + PAGE_SIZE);
 
   const buildPageHref = (p: number) => {
     const params = new URLSearchParams();
@@ -165,7 +162,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
             <LibraryRefreshButton />
           </div>
           <span className="text-base text-slate-500">
-            {filteredWords.length} / {words.length}
+            {filteredCount} / {totalWordCount}
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -182,7 +179,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               {pageWords.length === 0 ? (
                 <tr>
                   <td className="px-6 py-12 text-center text-base text-slate-500" colSpan={4}>
-                    {words.length === 0 ? "No cards yet." : "No words match current filters."}
+                    {totalWordCount === 0 ? "No cards yet." : "No words match current filters."}
                   </td>
                 </tr>
               ) : (
