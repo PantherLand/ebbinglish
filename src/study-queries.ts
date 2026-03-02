@@ -88,7 +88,7 @@ export async function buildWordStatusMap(
 export async function loadWordsWithStatus(userId: string): Promise<WordStatusShape[]> {
   const words = await prisma.word.findMany({
     where: { userId },
-    orderBy: { createdAt: "desc" },
+    orderBy: { updatedAt: "desc" },
     select: {
       id: true,
       text: true,

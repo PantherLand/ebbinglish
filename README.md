@@ -3,6 +3,7 @@
 Ebbinglish 是一个基于 **Round（学习轮次）** 的英文单词复习应用，使用 Next.js App Router + Prisma + Auth.js。
 
 当前主流程：
+
 - 在 Library 管理单词与标签
 - 从单词库创建 Round
 - 在 Round 里按 Session 学习（Normal / Extra Practice）
@@ -58,7 +59,8 @@ Ebbinglish 是一个基于 **Round（学习轮次）** 的英文单词复习应�
 - `/app/settings` 设置
 
 受保护路由：
-- 通过 `proxy.ts` 对 `/app/:path*` 做鉴权保护
+
+- 通过 `proxy.ts` 对 `/app/:path`* 做鉴权保护
 
 ## HTTP API 结构（`app/api/*`）
 
@@ -185,19 +187,19 @@ OPENAI_API_KEY="sk-..."
 npm install
 ```
 
-2. 生成 Prisma Client
+1. 生成 Prisma Client
 
 ```bash
 npm run prisma:generate
 ```
 
-3. 执行迁移
+1. 执行迁移
 
 ```bash
 npm run prisma:migrate
 ```
 
-4. 启动开发环境
+1. 启动开发环境
 
 ```bash
 npm run dev
@@ -217,6 +219,7 @@ npm run db:studio
 ## 测试
 
 当前包含 Vitest 单测（示例）：
+
 - `src/__tests__/memory-rating.test.ts`
 
 ## 常见问题
@@ -234,6 +237,7 @@ npm run prisma:generate
 ### 2) Google 登录失败
 
 检查：
+
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
 - Google Console 回调地址是否包含：
 - `http://localhost:3000/api/auth/callback/google`
