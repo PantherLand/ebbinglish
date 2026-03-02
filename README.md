@@ -62,7 +62,7 @@ Ebbinglish 是一个基于 **Round（学习轮次）** 的英文单词复习应�
 
 - 通过 `proxy.ts` 对 `/app/:path`* 做鉴权保护
 
-## HTTP API 结构（`app/api/*`）
+## HTTP API 结构（`app/api/`*）
 
 ### 1) Dictionary Suggest
 
@@ -105,7 +105,13 @@ Ebbinglish 是一个基于 **Round（学习轮次）** 的英文单词复习应�
   - 参数非法：`422` + `{ "ok": false, "error": "..." }`
   - 幂等性：按 `userId + language + word` 去重，重复调用只更新 `meaning`，不重复创建
 
-### 5) Auth.js
+### 5) Health Check
+
+- `GET /api/health`
+- 数据库可达时返回：`200` + `{ status: "ok", database: "ok", checkedAt: string }`
+- 数据库不可达时返回：`503` + `{ status: "degraded", database: "unreachable", checkedAt: string }`
+
+### 6) Auth.js
 
 - `GET/POST /api/auth/[...nextauth]`
 - 由 Auth.js handlers 提供
@@ -238,7 +244,7 @@ npm run prisma:generate
 
 检查：
 
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECREThea`
 - Google Console 回调地址是否包含：
 - `http://localhost:3000/api/auth/callback/google`
 
