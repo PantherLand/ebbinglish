@@ -45,7 +45,7 @@ export const metadata: Metadata = {
       "Learn English vocabulary with spaced repetition, round-based review, and YouGlish-powered pronunciation context.",
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Ebbinglish",
     description:
       "Learn English vocabulary with spaced repetition, round-based review, and YouGlish-powered pronunciation context.",
