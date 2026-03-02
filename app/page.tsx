@@ -1,16 +1,43 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { auth, signIn } from "@/src/auth";
 import EbbinglishBrand from "@/app/components/ebbinglish-brand";
 
+export const metadata: Metadata = {
+  title: "English Vocabulary Learning With Spaced Repetition",
+  description:
+    "Build your English vocabulary with spaced repetition, round-based review sessions, and YouGlish pronunciation examples.",
+  alternates: {
+    canonical: "/",
+  },
+};
+
 export default async function Home() {
   const session = await auth();
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Ebbinglish",
+    applicationCategory: "EducationalApplication",
+    operatingSystem: "Web",
+    description:
+      "An English vocabulary learning app with spaced repetition, round-based review, and YouGlish pronunciation examples.",
+  };
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col gap-8 px-6 py-16">
+      <script
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        type="application/ld+json"
+      />
       <header className="space-y-3">
         <EbbinglishBrand href="/" />
-        <p className="max-w-2xl text-slate-600">
-          Learn vocabulary with a round-driven encounter/polish workflow and YouGlish video immersion.
+        <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+          Learn English vocabulary with spaced repetition and real pronunciation examples
+        </h1>
+        <p className="max-w-3xl text-lg text-slate-600">
+          Ebbinglish helps you build a stronger English vocabulary through round-based review,
+          focused repetition, and YouGlish examples pulled from real spoken English.
         </p>
       </header>
 
@@ -44,11 +71,11 @@ export default async function Home() {
       </section>
 
       <section className="space-y-2 rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
-        <div className="font-semibold text-slate-900">MVP scope</div>
+        <h2 className="font-semibold text-slate-900">Why Ebbinglish works</h2>
         <ul className="list-disc pl-5">
-          <li>Word library (manual + CSV import)</li>
-          <li>Round-based first-impression mastery model</li>
-          <li>YouGlish link/iframe per word</li>
+          <li>Save and organize an English vocabulary list for long-term review</li>
+          <li>Use spaced repetition rounds to revisit words before you forget them</li>
+          <li>Study pronunciation and usage with YouGlish examples for each word</li>
         </ul>
       </section>
     </div>

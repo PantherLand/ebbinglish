@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import GlobalToastViewport from "@/app/components/global-toast-viewport";
 import AppShellNav from "@/app/components/app-shell-nav";
 import EbbinglishBrand from "@/app/components/ebbinglish-brand";
 import { auth, signOut } from "@/src/auth";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await auth();
