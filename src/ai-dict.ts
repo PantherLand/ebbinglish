@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildTrancyCompatibleAudioUrls } from "@/src/pronunciation-sources";
 
 // ─── Shared entry types (mirror DictionaryEntryData from the UI component) ───
 
@@ -106,6 +107,13 @@ const aiEntrySchema = z.object({
 
 const cache = new Map<string, { entry: AiDictEntry; expiresAt: number }>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const OPENROUTER_TIMEOUT_MS = 20_000;
+const OPENROUTER_DEFAULT_MODELS = [
+  "deepseek/deepseek-chat",
+  "openai/gpt-4o-mini",
+  "google/gemini-2.0-flash-001",
+  "google/gemini-flash-1.5",
+] as const;
 
 function getCached(key: string): AiDictEntry | null {
   const item = cache.get(key);
@@ -133,6 +141,37 @@ export function isAiDictConfigured(): boolean {
   return Boolean(
     process.env.OPENROUTER_API_KEY?.trim() || process.env.OPEN_ROUTER_API_KEY?.trim(),
   );
+}
+
+class OpenRouterHttpError extends Error {
+  status: number;
+  details: string;
+
+  constructor(status: number, details: string) {
+    super(`OpenRouter request failed (${status}): ${details.slice(0, 200)}`);
+    this.name = "OpenRouterHttpError";
+    this.status = status;
+    this.details = details;
+  }
+}
+
+function shouldRetryWithNextModel(error: unknown): boolean {
+  if (error instanceof OpenRouterHttpError) {
+    if (error.status === 403 || error.status === 404 || error.status === 429) {
+      return true;
+    }
+    return /(model.+not available|not available in your region|no endpoints found|provider.+unavailable)/i.test(
+      error.details,
+    );
+  }
+
+  if (error instanceof Error) {
+    return /(model.+not available|not available in your region|no endpoints found|provider.+unavailable)/i.test(
+      error.message,
+    );
+  }
+
+  return false;
 }
 
 function extractJsonObject(text: string): unknown {
@@ -165,8 +204,9 @@ export async function lookupWordByAI(headword: string): Promise<AiDictEntry> {
   );
   if (!apiKey) return emptyEntry(word);
 
-  const model =
-    process.env.OPENROUTER_MODEL?.trim() || "google/gemini-flash-1.5";
+  const configuredModel =
+    process.env.OPENROUTER_MODEL?.trim() || process.env.OPEN_ROUTER_MODEL?.trim() || "";
+  const modelCandidates = [...new Set([configuredModel, ...OPENROUTER_DEFAULT_MODELS].filter(Boolean))];
 
   const systemPrompt =
     "You are a bilingual English-Chinese lexicographer. Return ONLY a JSON object — no markdown, no extra text.";
@@ -204,56 +244,72 @@ Rules:
 - definitionZh must be natural Chinese
 - pronunciations uses standard IPA with forward slashes`;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  let rawText = "";
+  let lastError: unknown = null;
 
-  let response: Response;
-  try {
-    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://ebbinglish.app",
-        "X-Title": "Ebbinglish",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: 1500,
-        temperature: 0.2,
-      }),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    clearTimeout(timeout);
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("AI lookup timed out");
+  for (let index = 0; index < modelCandidates.length; index += 1) {
+    const model = modelCandidates[index];
+    const hasNextCandidate = index < modelCandidates.length - 1;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS);
+
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://ebbinglish.app",
+          "X-Title": "Ebbinglish",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+          max_tokens: 1500,
+          temperature: 0.2,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const details = await response.text().catch(() => "");
+        throw new OpenRouterHttpError(response.status, details);
+      }
+
+      const payload = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        error?: { message?: string };
+      };
+
+      if (payload.error?.message) {
+        throw new Error(`OpenRouter error: ${payload.error.message}`);
+      }
+
+      rawText = payload.choices?.[0]?.message?.content?.trim() ?? "";
+      if (rawText) {
+        break;
+      }
+      throw new Error("AI returned empty content");
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        lastError = new Error("AI lookup timed out");
+      } else {
+        lastError = error;
+      }
+
+      if (!hasNextCandidate || !shouldRetryWithNextModel(lastError)) {
+        throw lastError;
+      }
+    } finally {
+      clearTimeout(timeout);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
   }
 
-  if (!response.ok) {
-    const details = await response.text().catch(() => "");
-    throw new Error(`OpenRouter request failed (${response.status}): ${details.slice(0, 200)}`);
-  }
-
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-    error?: { message?: string };
-  };
-
-  if (payload.error?.message) {
-    throw new Error(`OpenRouter error: ${payload.error.message}`);
-  }
-
-  const rawText = payload.choices?.[0]?.message?.content?.trim() ?? "";
   if (!rawText) throw new Error("AI returned empty content");
 
   const jsonObj = extractJsonObject(rawText);
@@ -276,7 +332,7 @@ Rules:
     meaning: data.meaning ?? null,
     pos: data.pos ?? null,
     pronunciations: data.pronunciations,
-    audioUrls: [],
+    audioUrls: buildTrancyCompatibleAudioUrls(data.headword || word),
     posBlocks: data.posBlocks,
     senses,
     idioms: data.idioms,
@@ -293,7 +349,7 @@ function emptyEntry(headword: string): AiDictEntry {
     meaning: null,
     pos: null,
     pronunciations: [],
-    audioUrls: [],
+    audioUrls: buildTrancyCompatibleAudioUrls(headword),
     posBlocks: [],
     senses: [],
     idioms: [],

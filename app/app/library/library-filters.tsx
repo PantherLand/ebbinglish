@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 type StatusFilter =
@@ -11,6 +11,7 @@ type StatusFilter =
   | "unknown"
   | "mastered"
   | "frozen"
+  | "achieved"
   | "priority"
   | "normal";
 
@@ -24,6 +25,7 @@ const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "unknown", label: "Unknown" },
   { value: "frozen", label: "Frozen" },
   { value: "mastered", label: "Mastered" },
+  { value: "achieved", label: "Achieved Words" },
 ];
 
 function buildHref(pathname: string, query: string, status: StatusFilter, tag: string | null) {
@@ -58,18 +60,7 @@ export default function LibraryFilters({
     tag: initialTag ?? "",
   });
 
-  useEffect(() => {
-    setQuery(initialQuery);
-    setStatus(initialStatus);
-    setTag(initialTag ?? "");
-    lastAppliedRef.current = {
-      query: initialQuery.trim(),
-      status: initialStatus,
-      tag: initialTag ?? "",
-    };
-  }, [initialQuery, initialStatus, initialTag]);
-
-  const applyFilters = (nextQuery: string, nextStatus: StatusFilter, nextTag: string) => {
+  const applyFilters = useCallback((nextQuery: string, nextStatus: StatusFilter, nextTag: string) => {
     const normalizedQuery = nextQuery.trim();
     const normalizedTag = nextTag.trim();
     if (
@@ -81,14 +72,14 @@ export default function LibraryFilters({
     }
     lastAppliedRef.current = { query: normalizedQuery, status: nextStatus, tag: normalizedTag };
     router.replace(buildHref(pathname, normalizedQuery, nextStatus, normalizedTag || null), { scroll: false });
-  };
+  }, [pathname, router]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       applyFilters(query, status, tag);
     }, 240);
     return () => window.clearTimeout(timer);
-  }, [query, status, tag]);
+  }, [applyFilters, query, status, tag]);
 
   return (
     <div className="flex flex-col gap-2">

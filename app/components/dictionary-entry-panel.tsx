@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import YouglishModal from "@/app/components/youglish-modal";
+import { buildTrancyCompatibleAudioUrls } from "@/src/pronunciation-sources";
 
 export type DictionaryEntryExample = {
   en: string | null;
@@ -217,7 +218,10 @@ export default function DictionaryEntryPanel({
   const activeBlock = tabItems[activeTabIndex]?.block ?? null;
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrls = entry.audioUrls ?? [];
+  const audioUrls = useMemo(
+    () => buildTrancyCompatibleAudioUrls(entry.headword, entry.audioUrls ?? []),
+    [entry.audioUrls, entry.headword],
+  );
 
   function stopAudio() {
     const audio = audioRef.current;
@@ -237,44 +241,26 @@ export default function DictionaryEntryPanel({
 
   async function playPronunciation() {
     const url = audioUrls[0];
-    if (url) {
-      stopAudio();
-      try {
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        audio.onplay = () => setSpeaking(true);
-        audio.onended = () => setSpeaking(false);
-        audio.onerror = () => setSpeaking(false);
-        await audio.play();
-        return;
-      } catch {
-        setSpeaking(false);
-      }
-    }
-
-    if (typeof window === "undefined" || !window.speechSynthesis) {
+    if (!url) {
+      setSpeaking(false);
       return;
     }
-    const word = entry.headword.trim();
-    if (!word) {
-      return;
+    stopAudio();
+    try {
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onplay = () => setSpeaking(true);
+      audio.onended = () => setSpeaking(false);
+      audio.onerror = () => setSpeaking(false);
+      await audio.play();
+    } catch {
+      setSpeaking(false);
     }
-    const utterance = new SpeechSynthesisUtterance(word);
-    utterance.lang = "en-US";
-    utterance.rate = 0.92;
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
   }
 
   useEffect(() => {
     return () => {
       stopAudio();
-      if (typeof window !== "undefined" && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
     };
   }, []);
 

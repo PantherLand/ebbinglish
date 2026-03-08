@@ -6,7 +6,7 @@ import { DeleteWordButton } from "./delete-word-button";
 import AddWordModalTrigger from "./add-word-modal-trigger";
 import LibraryFilters from "./library-filters";
 import LibraryRefreshButton from "./library-refresh-button";
-import { togglePriorityFromListAction } from "./actions";
+import { toggleAchievedFromListAction, togglePriorityFromListAction } from "./actions";
 
 type StatusFilter =
   | "all"
@@ -16,6 +16,7 @@ type StatusFilter =
   | "unknown"
   | "mastered"
   | "frozen"
+  | "achieved"
   | "priority"
   | "normal";
 
@@ -27,6 +28,7 @@ function parseStatusFilter(value?: string): StatusFilter {
     value === "unknown" ||
     value === "mastered" ||
     value === "frozen" ||
+    value === "achieved" ||
     value === "priority" ||
     value === "normal"
   ) {
@@ -35,12 +37,13 @@ function parseStatusFilter(value?: string): StatusFilter {
   return "all";
 }
 
-function statusChipClass(status: "new" | "seen" | "fuzzy" | "unknown" | "mastered" | "frozen"): string {
+function statusChipClass(status: "new" | "seen" | "fuzzy" | "unknown" | "mastered" | "frozen" | "achieved"): string {
   if (status === "new") return "bg-blue-100 text-blue-700";
   if (status === "seen") return "bg-emerald-100 text-emerald-700";
   if (status === "fuzzy") return "bg-amber-100 text-amber-700";
   if (status === "unknown") return "bg-rose-100 text-rose-700";
   if (status === "frozen") return "bg-indigo-100 text-indigo-700";
+  if (status === "achieved") return "bg-violet-100 text-violet-700";
   return "bg-slate-100 text-slate-700";
 }
 
@@ -63,6 +66,7 @@ type LibraryPageProps = {
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const { q, status, tag, page } = await searchParams;
   const selectedStatus = parseStatusFilter(status);
+  const achievedView = selectedStatus === "achieved";
   const keyword = q?.trim() ?? "";
   const currentPage = parsePage(page);
   const session = await auth();
@@ -94,13 +98,14 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
     prisma.word.findMany({
       where: {
         userId: user.id,
+        isAchieved: achievedView,
         manualCategory: { not: null },
       },
       select: { manualCategory: true },
       distinct: ["manualCategory"],
     }),
     prisma.word.count({
-      where: { userId: user.id },
+      where: { userId: user.id, isAchieved: achievedView },
     }),
   ]);
   const availableTags = rawTagOptions
@@ -137,6 +142,18 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
     const nextQuery = params.toString();
     return nextQuery ? `/app/library?${nextQuery}` : "/app/library";
   };
+  const buildViewHref = (nextView: "learning" | "achieved") => {
+    const params = new URLSearchParams();
+    if (q?.trim()) params.set("q", q.trim());
+    if (selectedTag) params.set("tag", selectedTag);
+    if (nextView === "achieved") {
+      params.set("status", "achieved");
+    } else if (selectedStatus !== "achieved" && selectedStatus !== "all") {
+      params.set("status", selectedStatus);
+    }
+    const nextQuery = params.toString();
+    return nextQuery ? `/app/library?${nextQuery}` : "/app/library";
+  };
 
   return (
     <div className="space-y-6">
@@ -149,16 +166,40 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
       </div>
 
       <LibraryFilters
+        key={`${q?.trim() ?? ""}|${selectedStatus}|${selectedTag}`}
         initialQuery={q?.trim() ?? ""}
         initialStatus={selectedStatus}
         initialTag={selectedTag || null}
         tagOptions={availableTags}
       />
 
+      <div className="flex items-center gap-2">
+        <Link
+          className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+            !achievedView
+              ? "border-slate-900 bg-slate-900 text-white"
+              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+          href={buildViewHref("learning")}
+        >
+          Learning words
+        </Link>
+        <Link
+          className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+            achievedView
+              ? "border-violet-600 bg-violet-600 text-white"
+              : "border-violet-200 bg-white text-violet-700 hover:bg-violet-50"
+          }`}
+          href={buildViewHref("achieved")}
+        >
+          Achieved words
+        </Link>
+      </div>
+
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-slate-900">Your cards</h2>
+            <h2 className="text-lg font-semibold text-slate-900">{achievedView ? "Achieved words" : "Your cards"}</h2>
             <LibraryRefreshButton />
           </div>
           <span className="text-base text-slate-500">
@@ -179,7 +220,11 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               {pageWords.length === 0 ? (
                 <tr>
                   <td className="px-6 py-12 text-center text-base text-slate-500" colSpan={4}>
-                    {totalWordCount === 0 ? "No cards yet." : "No words match current filters."}
+                    {totalWordCount === 0
+                      ? achievedView
+                        ? "No achieved words yet."
+                        : "No cards yet."
+                      : "No words match current filters."}
                   </td>
                 </tr>
               ) : (
@@ -210,12 +255,29 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
                       )}
                     </td>
                     <td className="px-6 py-3.5">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusChipClass(word.status)}`}>
-                        {word.status}
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusChipClass(
+                          word.isAchieved ? "achieved" : word.status,
+                        )}`}
+                      >
+                        {word.isAchieved ? "achieved" : word.status}
                       </span>
                     </td>
                     <td className="px-6 py-3.5">
                       <div className="flex items-center justify-end gap-1">
+                        {word.isAchieved ? (
+                          <form action={toggleAchievedFromListAction}>
+                            <input name="wordId" type="hidden" value={word.id} />
+                            <input name="nextAchieved" type="hidden" value="false" />
+                            <button
+                              className="rounded-lg border border-violet-200 px-2.5 py-1.5 text-sm font-medium text-violet-700 transition hover:bg-violet-50"
+                              title="Move back to learning list"
+                              type="submit"
+                            >
+                              Move to learning
+                            </button>
+                          </form>
+                        ) : null}
                         <form action={togglePriorityFromListAction}>
                           <input name="wordId" type="hidden" value={word.id} />
                           <input name="nextPriority" type="hidden" value={word.isPriority ? "false" : "true"} />

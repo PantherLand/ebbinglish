@@ -80,6 +80,7 @@ model Word {
   note      String?
   entryJson Json?
   isPriority     Boolean @default(false)
+  isAchieved     Boolean @default(false)
   manualCategory String?
 
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)

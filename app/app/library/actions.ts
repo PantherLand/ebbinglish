@@ -3,6 +3,7 @@
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { setWordAchievedAction } from "@/app/app/study-actions";
 import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
 
@@ -35,6 +36,11 @@ const listWordActionSchema = z.object({
 const togglePrioritySchema = z.object({
   wordId: z.string().trim().min(1, "Word id is required"),
   nextPriority: z.enum(["true", "false"]),
+});
+
+const toggleAchievedSchema = z.object({
+  wordId: z.string().trim().min(1, "Word id is required"),
+  nextAchieved: z.enum(["true", "false"]),
 });
 
 export async function createWordAction(
@@ -213,4 +219,28 @@ export async function deleteWordFromListAction(formData: FormData): Promise<void
   } catch (error) {
     console.error("[deleteWordFromListAction] DB delete failed:", error);
   }
+}
+
+export async function toggleAchievedFromListAction(formData: FormData): Promise<void> {
+  const parsed = toggleAchievedSchema.safeParse({
+    wordId: formData.get("wordId"),
+    nextAchieved: formData.get("nextAchieved"),
+  });
+
+  if (!parsed.success) {
+    console.error("[toggleAchievedFromListAction] Invalid input:", parsed.error.flatten());
+    return;
+  }
+
+  const result = await setWordAchievedAction({
+    wordId: parsed.data.wordId,
+    achieved: parsed.data.nextAchieved === "true",
+  });
+
+  if (!result.ok) {
+    console.error("[toggleAchievedFromListAction] Failed:", result.message);
+    return;
+  }
+
+  revalidatePath("/app/library");
 }

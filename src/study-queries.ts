@@ -7,12 +7,13 @@ type WordStatusShape = {
   text: string;
   note: string | null;
   isPriority: boolean;
+  isAchieved: boolean;
   manualCategory: string | null;
   createdAt: Date;
   status: WordMasteryStatus;
 };
 
-type LibraryStatusFilter = WordMasteryStatus | "all" | "priority" | "normal";
+type LibraryStatusFilter = WordMasteryStatus | "all" | "priority" | "normal" | "achieved";
 
 type LoadLibraryWordPageOptions = {
   userId: string;
@@ -113,6 +114,7 @@ export async function loadWordsWithStatus(userId: string): Promise<WordStatusSha
       text: true,
       note: true,
       isPriority: true,
+      isAchieved: true,
       manualCategory: true,
       createdAt: true,
     },
@@ -149,6 +151,12 @@ function buildLibraryBaseWhere(
 
   if (selectedTag) {
     where.manualCategory = selectedTag;
+  }
+
+  if (selectedStatus === "achieved") {
+    where.isAchieved = true;
+  } else {
+    where.isAchieved = false;
   }
 
   if (selectedStatus === "priority") {
@@ -221,11 +229,17 @@ export async function loadLibraryWordPage({
     text: true,
     note: true,
     isPriority: true,
+    isAchieved: true,
     manualCategory: true,
     createdAt: true,
   } satisfies Prisma.WordSelect;
 
-  if (selectedStatus === "all" || selectedStatus === "priority" || selectedStatus === "normal") {
+  if (
+    selectedStatus === "all" ||
+    selectedStatus === "priority" ||
+    selectedStatus === "normal" ||
+    selectedStatus === "achieved"
+  ) {
     const filteredCount = await prisma.word.count({ where: baseWhere });
     const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
     const safePage = Math.min(currentPage, totalPages);

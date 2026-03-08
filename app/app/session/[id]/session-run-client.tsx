@@ -3,8 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { finishSessionAction, saveSessionProgressAction } from "@/app/app/study-actions";
+import {
+  finishSessionAction,
+  saveSessionProgressAction,
+  setWordAchievedAction,
+} from "@/app/app/study-actions";
 import YouglishEmbed from "@/app/components/youglish-embed";
+import { buildTrancyCompatibleAudioUrls } from "@/src/pronunciation-sources";
 import type { SessionResultRecord } from "@/src/study-model";
 
 type SessionWord = {
@@ -26,6 +31,7 @@ const OUTCOME_KEYS = {
 } as const;
 
 const PROGRESS_STORAGE_VERSION = 1;
+const EMPTY_STRINGS: string[] = [];
 
 type PersistedSessionProgress = {
   version: typeof PROGRESS_STORAGE_VERSION;
@@ -112,6 +118,8 @@ export default function SessionRunClient({
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [achieving, startAchieveTransition] = useTransition();
+  const [youglishLoaded, setYouglishLoaded] = useState(false);
 
   const currentWord = words[currentIndex] ?? null;
   const progress = words.length === 0 ? 0 : Math.round((results.length / words.length) * 100);
@@ -203,6 +211,7 @@ export default function SessionRunClient({
 
   useEffect(() => {
     setIsFlipped(false);
+    setYouglishLoaded(false);
   }, [currentIndex]);
 
   useEffect(() => {
@@ -235,7 +244,10 @@ export default function SessionRunClient({
           [currentWord.id]: {
             meaning: payload.meaning?.trim() || payload.fallbackText?.trim() || null,
             pronunciations: (payload.pronunciations ?? []).filter(Boolean).slice(0, 3),
-            audioUrls: (payload.audioUrls ?? []).filter(Boolean).slice(0, 2),
+            audioUrls: buildTrancyCompatibleAudioUrls(
+              currentWord.text,
+              (payload.audioUrls ?? []).filter(Boolean),
+            ),
           },
         }));
       } catch {
@@ -245,7 +257,7 @@ export default function SessionRunClient({
             [currentWord.id]: {
               meaning: null,
               pronunciations: [],
-              audioUrls: [],
+              audioUrls: buildTrancyCompatibleAudioUrls(currentWord.text),
             },
           }));
         }
@@ -258,23 +270,6 @@ export default function SessionRunClient({
 
     return () => controller.abort();
   }, [currentWord, dictMap]);
-
-  useEffect(() => {
-    if (!currentWord || !autoPlayAudio) {
-      return;
-    }
-    const info = dictMap[currentWord.id];
-    const audio = info?.audioUrls?.[0];
-    if (!audio) {
-      return;
-    }
-    const player = new Audio(audio);
-    void player.play().catch(() => {});
-    return () => {
-      player.pause();
-      player.currentTime = 0;
-    };
-  }, [autoPlayAudio, currentWord, dictMap]);
 
   useEffect(() => {
     const onKeydown = (event: KeyboardEvent) => {
@@ -305,6 +300,26 @@ export default function SessionRunClient({
   });
 
   const currentInfo = currentWord ? dictMap[currentWord.id] : null;
+  const currentAudioUrls = useMemo(() => {
+    if (!currentWord) {
+      return EMPTY_STRINGS;
+    }
+    return buildTrancyCompatibleAudioUrls(currentWord.text, currentInfo?.audioUrls ?? EMPTY_STRINGS);
+  }, [currentInfo?.audioUrls, currentWord]);
+  const currentAudioUrl = currentAudioUrls[0] ?? null;
+
+  useEffect(() => {
+    if (!currentWord || !autoPlayAudio || !currentAudioUrl) {
+      return;
+    }
+    const player = new Audio(currentAudioUrl);
+    void player.play().catch(() => {});
+    return () => {
+      player.pause();
+      player.currentTime = 0;
+    };
+  }, [autoPlayAudio, currentAudioUrl, currentWord]);
+
   const displayMeaning = useMemo(() => {
     if (!currentWord) return "";
     if (currentWord.translation.trim()) return currentWord.translation.trim();
@@ -314,10 +329,8 @@ export default function SessionRunClient({
   }, [currentInfo?.meaning, currentWord, loadingDictWordId]);
 
   function playCurrentAudio() {
-    if (!currentWord) return;
-    const audioUrl = dictMap[currentWord.id]?.audioUrls?.[0];
-    if (!audioUrl) return;
-    const player = new Audio(audioUrl);
+    if (!currentAudioUrl) return;
+    const player = new Audio(currentAudioUrl);
     void player.play().catch(() => {});
   }
 
@@ -363,6 +376,27 @@ export default function SessionRunClient({
         }
         clearLocalProgress();
         router.push(`/app/session/${sessionId}/summary`);
+      })();
+    });
+  }
+
+  function handleAchieveCurrent() {
+    if (!currentWord || !restoreReady || finishing || pending || achieving) {
+      return;
+    }
+
+    setError(null);
+    startAchieveTransition(() => {
+      void (async () => {
+        const result = await setWordAchievedAction({
+          wordId: currentWord.id,
+          achieved: true,
+        });
+        if (!result.ok) {
+          setError(result.message);
+          return;
+        }
+        handleMark("known");
       })();
     });
   }
@@ -447,11 +481,33 @@ export default function SessionRunClient({
                 {displayMeaning}
               </div>
               <div className="w-full pt-1">
-                <YouglishEmbed
-                  className="min-h-[200px]"
-                  headword={currentWord.text}
-                  minHeightClassName="min-h-[200px]"
-                />
+                {youglishLoaded ? (
+                  <YouglishEmbed
+                    className="min-h-[200px]"
+                    headword={currentWord.text}
+                    minHeightClassName="min-h-[200px]"
+                  />
+                ) : (
+                  <div className="flex justify-center py-1">
+                    <button
+                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700"
+                      onClick={() => setYouglishLoaded(true)}
+                      type="button"
+                    >
+                      <svg
+                        aria-hidden="true"
+                        className="h-3 w-3"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <polygon fill="currentColor" points="5,3 19,12 5,21" />
+                      </svg>
+                      Load YouGlish
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -467,7 +523,16 @@ export default function SessionRunClient({
           Show Answer
         </button>
       ) : (
-        <div className="mt-6 grid gap-2 sm:grid-cols-3">
+        <div className="mt-6 grid gap-2 sm:grid-cols-4">
+          <button
+            className="rounded-xl border border-violet-300 bg-white px-4 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={achieving || finishing || pending}
+            onClick={handleAchieveCurrent}
+            type="button"
+          >
+            {achieving ? "Achieving..." : "Achieve"}
+            <div className="mt-1 text-[11px] font-normal opacity-70">Master & hide</div>
+          </button>
           <button
             className="rounded-xl border border-rose-300 bg-white px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
             onClick={() => handleMark("unknown")}

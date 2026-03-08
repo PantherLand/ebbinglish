@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import YouglishEmbed from "@/app/components/youglish-embed";
+import { buildTrancyCompatibleAudioUrls } from "@/src/pronunciation-sources";
 import { generatePracticeStoryAction, submitReviewBatchAction } from "./actions";
 
 type ReviewCard = {
@@ -254,7 +255,13 @@ export default function ReviewSession({
   const currentStoredMeaning = current?.meaning?.trim() || null;
   const currentDictInfo = current ? dictInfoByCardId[current.id] : null;
   const currentPronunciations = currentDictInfo?.pronunciations ?? EMPTY_STRINGS;
-  const currentAudioUrls = currentDictInfo?.audioUrls ?? EMPTY_STRINGS;
+  const currentAudioUrls = useMemo(() => {
+    if (!current) {
+      return EMPTY_STRINGS;
+    }
+    return buildTrancyCompatibleAudioUrls(current.text, currentDictInfo?.audioUrls ?? EMPTY_STRINGS);
+  }, [current, currentDictInfo?.audioUrls]);
+  const currentAudioUrl = currentAudioUrls[0] ?? null;
   const displayedMeaning =
     currentStoredMeaning ||
     currentDictInfo?.meaning ||
@@ -293,12 +300,11 @@ export default function ReviewSession({
   }, [stopAudio]);
 
   function speakCurrent() {
-    const url = currentAudioUrls[0];
-    if (!url) {
+    if (!currentAudioUrl) {
       setSpeaking(false);
       return;
     }
-    void playAudio(url);
+    void playAudio(currentAudioUrl);
   }
 
   useEffect(() => {
@@ -421,20 +427,19 @@ export default function ReviewSession({
       return;
     }
 
-    const url = currentAudioUrls[0];
-    if (!url) {
+    if (!currentAudioUrl) {
       setSpeaking(false);
       stopAudio();
       return;
     }
 
-    void playAudio(url);
+    void playAudio(currentAudioUrl);
 
     return () => {
       stopAudio();
       setSpeaking(false);
     };
-  }, [current, currentAudioUrls, playAudio, state.started, stopAudio]);
+  }, [current, currentAudioUrl, playAudio, state.started, stopAudio]);
 
   useEffect(() => {
     if (!current || current.id in dictInfoByCardId) {
@@ -476,7 +481,7 @@ export default function ReviewSession({
           [current.id]: {
             meaning: value,
             pronunciations,
-            audioUrls,
+            audioUrls: buildTrancyCompatibleAudioUrls(current.text, audioUrls),
           },
         }));
       } catch {
@@ -486,7 +491,7 @@ export default function ReviewSession({
             [current.id]: {
               meaning: null,
               pronunciations: [],
-              audioUrls: [],
+              audioUrls: buildTrancyCompatibleAudioUrls(current.text),
             },
           }));
         }

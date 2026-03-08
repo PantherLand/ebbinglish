@@ -29,7 +29,7 @@ export default async function NewRoundPage() {
   }
 
   const words = await loadWordsWithStatus(user.id);
-  const availableWords = words.filter((word) => word.status !== "mastered");
+  const availableWords = words.filter((word) => word.status !== "mastered" && !word.isAchieved);
 
   return <RoundBuilderClient words={availableWords} />;
 }
