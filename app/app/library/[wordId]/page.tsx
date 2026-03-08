@@ -12,6 +12,7 @@ import { EbbinghausProgress } from "./ebbinghaus-progress";
 import { MemoryRatingCard } from "./memory-rating-card";
 import { RetentionCurveChart } from "./retention-curve-chart";
 import { ReviewLogList } from "./review-log-list";
+import { toggleAchievedFromDetailAction } from "./actions";
 import { WordHeatmap } from "./word-heatmap";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -140,6 +141,11 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-3xl font-semibold">{word.text}</h1>
+          {word.isAchieved ? (
+            <span className="rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
+              Achieved
+            </span>
+          ) : null}
           {word.isPriority ? (
             <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
               Priority
@@ -190,6 +196,30 @@ export default async function WordDetailPage({ params }: WordDetailPageProps) {
         </div>
 
         <div className="space-y-4">
+          <section className="space-y-3 rounded-lg border p-4">
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold">Learning status</h2>
+              <p className="text-sm text-slate-600">
+                {word.isAchieved
+                  ? "This word is in your achieved list and is excluded from new rounds."
+                  : "You can manually move this word to achieved when you no longer want it in active learning."}
+              </p>
+            </div>
+            <form action={toggleAchievedFromDetailAction}>
+              <input name="wordId" type="hidden" value={word.id} />
+              <input name="nextAchieved" type="hidden" value={word.isAchieved ? "false" : "true"} />
+              <button
+                className={`inline-flex w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition ${
+                  word.isAchieved
+                    ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    : "bg-violet-600 text-white hover:bg-violet-700"
+                }`}
+                type="submit"
+              >
+                {word.isAchieved ? "Move back to learning" : "Mark as achieved"}
+              </button>
+            </form>
+          </section>
           <StudyConfigForm
             isPriority={word.isPriority}
             manualCategory={word.manualCategory}

@@ -109,7 +109,7 @@ function normalizeFrozenStatusForRound(
   if (latestGrade === 1) {
     return "fuzzy";
   }
-  return "seen";
+  return "known";
 }
 
 export async function createRoundAction(input: z.infer<typeof createRoundSchema>): Promise<ActionResult<{ roundId: string }>> {
@@ -291,6 +291,8 @@ export async function editRoundWordStatusAction(formData: FormData) {
           lastReviewedAt: now,
           seenCount: 1,
           lapseCount: grade === 0 ? 1 : 0,
+          latestFirstTryGrade:
+            targetStatus === "unknown" ? 0 : targetStatus === "fuzzy" ? 1 : targetStatus === "first_try_mastered" ? 2 : null,
           consecutivePerfect: targetStatus === "first_try_mastered" ? 1 : 0,
           freezeRounds: 0,
           isMastered: isMasteredTarget,
@@ -300,6 +302,14 @@ export async function editRoundWordStatusAction(formData: FormData) {
           lastReviewedAt: now,
           seenCount: { increment: 1 },
           lapseCount: grade === 0 ? { increment: 1 } : undefined,
+          latestFirstTryGrade:
+            targetStatus === "unknown"
+              ? 0
+              : targetStatus === "fuzzy"
+                ? 1
+                : targetStatus === "first_try_mastered"
+                  ? 2
+                  : undefined,
           consecutivePerfect: targetStatus === "first_try_mastered" ? 1 : 0,
           freezeRounds: 0,
           isMastered: isMasteredTarget,
@@ -409,6 +419,7 @@ export async function startSessionAction(
         seenCount: true,
         isMastered: true,
         freezeRounds: true,
+        latestFirstTryGrade: true,
       },
     }),
     prisma.reviewLog.findMany({
@@ -845,6 +856,7 @@ export async function finishSessionAction(
               lastReviewedAt: now,
               seenCount: 1,
               lapseCount: grade === 0 ? 1 : 0,
+              latestFirstTryGrade: isFirstAttempt ? grade : null,
               consecutivePerfect: 0,
               freezeRounds: 0,
               isMastered: false,
@@ -861,6 +873,7 @@ export async function finishSessionAction(
               lastReviewedAt: now,
               seenCount: { increment: 1 },
               lapseCount: grade === 0 ? { increment: 1 } : undefined,
+              latestFirstTryGrade: isFirstAttempt ? grade : undefined,
             },
           });
           stateMap.set(wordId, updated);
@@ -949,6 +962,7 @@ export async function finishSessionAction(
     });
 
     revalidatePath("/app/today");
+    revalidatePath("/app/library");
     revalidatePath("/app/rounds");
     revalidatePath(`/app/rounds/${done.roundId}`);
     revalidatePath(`/app/session/${parsed.data.sessionId}`);

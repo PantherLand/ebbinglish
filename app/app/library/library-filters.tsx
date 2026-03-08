@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 type StatusFilter =
   | "all"
   | "new"
-  | "seen"
+  | "known"
   | "fuzzy"
   | "unknown"
   | "mastered"
@@ -20,7 +20,7 @@ const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "priority", label: "Priority" },
   { value: "normal", label: "Normal" },
   { value: "new", label: "New" },
-  { value: "seen", label: "Seen" },
+  { value: "known", label: "Known" },
   { value: "fuzzy", label: "Fuzzy" },
   { value: "unknown", label: "Unknown" },
   { value: "frozen", label: "Frozen" },

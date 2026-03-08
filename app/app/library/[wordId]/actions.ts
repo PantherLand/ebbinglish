@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { setWordAchievedAction } from "@/app/app/study-actions";
 import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
 
@@ -14,6 +15,11 @@ const updateStudyConfigSchema = z.object({
   wordId: z.string().min(1),
   isPriority: z.boolean(),
   manualCategory: z.string().trim().max(40).optional().or(z.literal("")),
+});
+
+const toggleAchievedSchema = z.object({
+  wordId: z.string().trim().min(1, "Word id is required"),
+  nextAchieved: z.enum(["true", "false"]),
 });
 
 export async function updateStudyConfigAction(
@@ -73,4 +79,29 @@ export async function updateStudyConfigAction(
   revalidatePath("/app/today");
 
   return { status: "success", message: "Study config saved" };
+}
+
+export async function toggleAchievedFromDetailAction(formData: FormData): Promise<void> {
+  const parsed = toggleAchievedSchema.safeParse({
+    wordId: formData.get("wordId"),
+    nextAchieved: formData.get("nextAchieved"),
+  });
+
+  if (!parsed.success) {
+    console.error("[toggleAchievedFromDetailAction] Invalid input:", parsed.error.flatten());
+    return;
+  }
+
+  const result = await setWordAchievedAction({
+    wordId: parsed.data.wordId,
+    achieved: parsed.data.nextAchieved === "true",
+  });
+
+  if (!result.ok) {
+    console.error("[toggleAchievedFromDetailAction] Failed:", result.message);
+    return;
+  }
+
+  revalidatePath("/app/library");
+  revalidatePath(`/app/library/${parsed.data.wordId}`);
 }

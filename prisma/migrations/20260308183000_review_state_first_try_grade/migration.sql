@@ -1,0 +1,2 @@
+ALTER TABLE "ReviewState"
+ADD COLUMN IF NOT EXISTS "latestFirstTryGrade" INTEGER;

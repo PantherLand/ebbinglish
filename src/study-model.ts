@@ -2,7 +2,7 @@ import type { Prisma, ReviewState } from "@prisma/client";
 import { prisma } from "@/src/prisma";
 import { hasStudyPrismaModels, STUDY_PRISMA_HINT } from "@/src/study-runtime";
 
-export type WordMasteryStatus = "new" | "seen" | "fuzzy" | "unknown" | "mastered" | "frozen";
+export type WordMasteryStatus = "new" | "known" | "fuzzy" | "unknown" | "mastered" | "frozen";
 export type SessionOutcome = "known" | "fuzzy" | "unknown";
 
 export type SessionResultRecord = {
@@ -12,7 +12,7 @@ export type SessionResultRecord = {
 };
 
 export function deriveWordStatus(
-  state: Pick<ReviewState, "seenCount" | "isMastered" | "freezeRounds"> | null,
+  state: Pick<ReviewState, "seenCount" | "isMastered" | "freezeRounds" | "latestFirstTryGrade"> | null,
   latestGrade: number | null,
 ): WordMasteryStatus {
   if (!state || state.seenCount <= 0) {
@@ -24,13 +24,14 @@ export function deriveWordStatus(
   if (state.isMastered) {
     return "mastered";
   }
-  if (latestGrade === 0) {
+  const effectiveGrade = state.latestFirstTryGrade ?? latestGrade;
+  if (effectiveGrade === 0) {
     return "unknown";
   }
-  if (latestGrade === 1) {
+  if (effectiveGrade === 1) {
     return "fuzzy";
   }
-  return "seen";
+  return "known";
 }
 
 export function parseSessionResults(value: Prisma.JsonValue | null | undefined): SessionResultRecord[] {

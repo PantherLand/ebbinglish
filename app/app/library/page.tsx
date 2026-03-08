@@ -11,7 +11,7 @@ import { toggleAchievedFromListAction, togglePriorityFromListAction } from "./ac
 type StatusFilter =
   | "all"
   | "new"
-  | "seen"
+  | "known"
   | "fuzzy"
   | "unknown"
   | "mastered"
@@ -24,6 +24,8 @@ function parseStatusFilter(value?: string): StatusFilter {
   if (
     value === "new" ||
     value === "seen" ||
+    value === "learning" ||
+    value === "known" ||
     value === "fuzzy" ||
     value === "unknown" ||
     value === "mastered" ||
@@ -32,14 +34,17 @@ function parseStatusFilter(value?: string): StatusFilter {
     value === "priority" ||
     value === "normal"
   ) {
+    if (value === "seen" || value === "learning") {
+      return "known";
+    }
     return value;
   }
   return "all";
 }
 
-function statusChipClass(status: "new" | "seen" | "fuzzy" | "unknown" | "mastered" | "frozen" | "achieved"): string {
+function statusChipClass(status: "new" | "known" | "fuzzy" | "unknown" | "mastered" | "frozen" | "achieved"): string {
   if (status === "new") return "bg-blue-100 text-blue-700";
-  if (status === "seen") return "bg-emerald-100 text-emerald-700";
+  if (status === "known") return "bg-emerald-100 text-emerald-700";
   if (status === "fuzzy") return "bg-amber-100 text-amber-700";
   if (status === "unknown") return "bg-rose-100 text-rose-700";
   if (status === "frozen") return "bg-indigo-100 text-indigo-700";
@@ -270,43 +275,58 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
                             <input name="wordId" type="hidden" value={word.id} />
                             <input name="nextAchieved" type="hidden" value="false" />
                             <button
-                              className="rounded-lg border border-violet-200 px-2.5 py-1.5 text-sm font-medium text-violet-700 transition hover:bg-violet-50"
-                              title="Move back to learning list"
+                              aria-label="Move back to learning"
+                              className="rounded p-1.5 text-gray-500 transition hover:bg-violet-50 hover:text-violet-700"
+                              title="Move back to learning"
                               type="submit"
                             >
-                              Move to learning
+                              <svg
+                                aria-hidden="true"
+                                className="h-4 w-4"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.8"
+                                viewBox="0 0 24 24"
+                              >
+                                <path d="M9 14 4 9l5-5" />
+                                <path d="M4 9h9a7 7 0 1 1 0 14h-1" />
+                              </svg>
                             </button>
                           </form>
                         ) : null}
-                        <form action={togglePriorityFromListAction}>
-                          <input name="wordId" type="hidden" value={word.id} />
-                          <input name="nextPriority" type="hidden" value={word.isPriority ? "false" : "true"} />
-                          <button
-                            aria-label={word.isPriority ? "Remove priority" : "Add priority"}
-                            className={`rounded-lg p-1.5 transition ${
-                              word.isPriority
-                                ? "text-amber-500 hover:bg-amber-50"
-                                : "text-slate-400 hover:bg-slate-100 hover:text-amber-500"
-                            }`}
-                            title={word.isPriority ? "Remove priority" : "Add priority"}
-                            type="submit"
-                          >
-                            <svg
-                              aria-hidden="true"
-                              className="h-4 w-4"
-                              fill={word.isPriority ? "currentColor" : "none"}
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              viewBox="0 0 24 24"
+                        {!achievedView ? (
+                          <form action={togglePriorityFromListAction}>
+                            <input name="wordId" type="hidden" value={word.id} />
+                            <input name="nextPriority" type="hidden" value={word.isPriority ? "false" : "true"} />
+                            <button
+                              aria-label={word.isPriority ? "Remove priority" : "Add priority"}
+                              className={`rounded-lg p-1.5 transition ${
+                                word.isPriority
+                                  ? "text-amber-500 hover:bg-amber-50"
+                                  : "text-slate-400 hover:bg-slate-100 hover:text-amber-500"
+                              }`}
+                              title={word.isPriority ? "Remove priority" : "Add priority"}
+                              type="submit"
                             >
-                              <path
-                                d="M11.05 2.93c.3-.92 1.6-.92 1.9 0l1.2 3.7a1 1 0 00.95.69h3.89c.97 0 1.37 1.24.59 1.81l-3.15 2.29a1 1 0 00-.37 1.12l1.2 3.7c.3.92-.76 1.68-1.54 1.12l-3.15-2.29a1 1 0 00-1.18 0l-3.15 2.29c-.78.56-1.84-.2-1.54-1.12l1.2-3.7a1 1 0 00-.37-1.12L3.47 9.13c-.78-.57-.38-1.81.59-1.81h3.89a1 1 0 00.95-.69l1.2-3.7z"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                        </form>
+                              <svg
+                                aria-hidden="true"
+                                className="h-4 w-4"
+                                fill={word.isPriority ? "currentColor" : "none"}
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M11.05 2.93c.3-.92 1.6-.92 1.9 0l1.2 3.7a1 1 0 00.95.69h3.89c.97 0 1.37 1.24.59 1.81l-3.15 2.29a1 1 0 00-.37 1.12l1.2 3.7c.3.92-.76 1.68-1.54 1.12l-3.15-2.29a1 1 0 00-1.18 0l-3.15 2.29c-.78.56-1.84-.2-1.54-1.12l1.2-3.7a1 1 0 00-.37-1.12L3.47 9.13c-.78-.57-.38-1.81.59-1.81h3.89a1 1 0 00.95-.69l1.2-3.7z"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                          </form>
+                        ) : null}
                         <DeleteWordButton wordId={word.id} wordText={word.text} />
                         <Link
                           className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"

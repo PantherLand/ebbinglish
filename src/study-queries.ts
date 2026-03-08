@@ -45,7 +45,7 @@ function normalizeFrozenStatus(
   if (latestGrade === 1) {
     return "fuzzy";
   }
-  return "seen";
+  return "known";
 }
 
 export async function buildWordStatusMap(
@@ -59,27 +59,24 @@ export async function buildWordStatusMap(
   }
 
   const ignoreFrozen = Boolean(options?.ignoreFrozen);
-  // Only fetch ReviewLogs when ignoreFrozen is set (used to resolve the display
-  // status of frozen words). Skip the query entirely for the common path
-  // (e.g. library page) to avoid a potentially large full-table scan.
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
   const [reviewStates, reviewLogs] = await Promise.all([
     prisma.reviewState.findMany({
       where: { userId, wordId: { in: uniqueWordIds } },
-      select: { wordId: true, seenCount: true, isMastered: true, freezeRounds: true },
+      select: { wordId: true, seenCount: true, isMastered: true, freezeRounds: true, latestFirstTryGrade: true },
     }),
-    ignoreFrozen
-      ? prisma.reviewLog.findMany({
-          where: {
-            userId,
-            wordId: { in: uniqueWordIds },
-            reviewedAt: { gte: ninetyDaysAgo },
-          },
-          select: { wordId: true, grade: true, reviewedAt: true },
-          orderBy: { reviewedAt: "desc" },
-        })
-      : Promise.resolve([] as { wordId: string; grade: number; reviewedAt: Date }[]),
+    prisma.reviewLog.findMany({
+      where: {
+        userId,
+        wordId: { in: uniqueWordIds },
+      },
+      select: { wordId: true, grade: true, reviewedAt: true },
+      orderBy: [
+        { wordId: "asc" },
+        { reviewedAt: "desc" },
+      ],
+      distinct: ["wordId"],
+    }),
   ]);
 
   const stateByWordId = new Map(reviewStates.map((item) => [item.wordId, item]));

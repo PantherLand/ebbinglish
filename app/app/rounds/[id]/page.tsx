@@ -17,7 +17,7 @@ type RoundDetailPageProps = {
 
 function statusChipClass(status: string): string {
   if (status === "new") return "bg-blue-100 text-blue-700";
-  if (status === "seen") return "bg-emerald-100 text-emerald-700";
+  if (status === "known") return "bg-emerald-100 text-emerald-700";
   if (status === "fuzzy") return "bg-amber-100 text-amber-700";
   if (status === "unknown") return "bg-rose-100 text-rose-700";
   if (status === "frozen") return "bg-indigo-100 text-indigo-700";

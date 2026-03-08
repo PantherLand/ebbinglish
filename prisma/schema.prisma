@@ -103,6 +103,7 @@ model ReviewState {
   lastReviewedAt DateTime?
   lapseCount    Int      @default(0)
   seenCount     Int      @default(0)
+  latestFirstTryGrade Int?
   consecutivePerfect Int @default(0)
   freezeRounds  Int      @default(0)
   isMastered    Boolean  @default(false)

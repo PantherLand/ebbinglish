@@ -78,7 +78,7 @@ export default async function StatsPage() {
     (item) => item.status === "mastered" || item.status === "frozen",
   ).length;
   const learning = wordsWithStatus.filter(
-    (item) => item.status === "seen" || item.status === "fuzzy" || item.status === "unknown",
+    (item) => item.status === "known" || item.status === "fuzzy" || item.status === "unknown",
   ).length;
   const brandNew = wordsWithStatus.filter((item) => item.status === "new").length;
 

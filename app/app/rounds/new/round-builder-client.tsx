@@ -11,7 +11,7 @@ type BuilderWord = {
   note: string | null;
   manualCategory: string | null;
   isPriority: boolean;
-  status: "new" | "seen" | "fuzzy" | "unknown" | "mastered" | "frozen";
+  status: "new" | "known" | "fuzzy" | "unknown" | "mastered" | "frozen";
 };
 
 type FilterMode = "all" | "new" | "learning" | "frozen";
@@ -19,7 +19,7 @@ type PriorityFilterMode = "all" | "priority" | "normal";
 
 function statusChipClass(status: BuilderWord["status"]): string {
   if (status === "new") return "bg-blue-100 text-blue-700";
-  if (status === "seen") return "bg-emerald-100 text-emerald-700";
+  if (status === "known") return "bg-emerald-100 text-emerald-700";
   if (status === "fuzzy") return "bg-amber-100 text-amber-700";
   if (status === "unknown") return "bg-rose-100 text-rose-700";
   if (status === "frozen") return "bg-indigo-100 text-indigo-700";
@@ -71,7 +71,7 @@ export default function RoundBuilderClient({ words }: { words: BuilderWord[] }) 
       if (filterMode === "new" && word.status !== "new") {
         return false;
       }
-      if (filterMode === "learning" && !["seen", "fuzzy", "unknown"].includes(word.status)) {
+      if (filterMode === "learning" && !["known", "fuzzy", "unknown"].includes(word.status)) {
         return false;
       }
       if (filterMode === "frozen" && word.status !== "frozen") {

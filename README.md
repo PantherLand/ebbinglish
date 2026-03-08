@@ -238,6 +238,11 @@ npm run db:studio
 npm run prisma:generate
 ```
 
+如果你是直接用 `next dev` 启动，而不是 `npm run dev`，还需要重启开发服务器。否则 Next.js 进程可能继续持有旧的 Prisma Client，表现为：
+
+- `Unknown field ... for select statement on model Word`
+- 新增字段（例如 `isAchieved`）已经在 `schema.prisma` 里，但运行时仍然报不存在
+
 然后重启 `npm run dev`。
 
 ### 2) Google 登录失败
