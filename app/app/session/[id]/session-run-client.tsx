@@ -385,6 +385,13 @@ export default function SessionRunClient({
       return;
     }
 
+    const confirmed = window.confirm(
+      `Mark "${currentWord.text}" as achieved? It will be mastered and hidden from active learning.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
     setError(null);
     startAchieveTransition(() => {
       void (async () => {
@@ -525,7 +532,7 @@ export default function SessionRunClient({
       ) : (
         <div className="mt-6 grid gap-2 sm:grid-cols-4">
           <button
-            className="rounded-xl border border-violet-300 bg-white px-4 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={achieving || finishing || pending}
             onClick={handleAchieveCurrent}
             type="button"

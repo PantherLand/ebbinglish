@@ -3,14 +3,6 @@ import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
 import { hasStudyPrismaModels, STUDY_PRISMA_HINT } from "@/src/study-runtime";
 
-function getTodayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
-}
-
 export default async function TodayPage() {
   const session = await auth();
   const email = session?.user?.email;
@@ -47,27 +39,10 @@ export default async function TodayPage() {
     );
   }
 
-  const { start, end } = getTodayRange();
-
-  const [rounds, reviewedTodayLogs] = await Promise.all([
-    prisma.studyRound.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.reviewLog.findMany({
-      where: {
-        userId: user.id,
-        reviewedAt: {
-          gte: start,
-          lt: end,
-        },
-      },
-      select: {
-        wordId: true,
-      },
-    }),
-  ]);
-  const uniqueWordsReviewedToday = new Set(reviewedTodayLogs.map((item) => item.wordId)).size;
+  const rounds = await prisma.studyRound.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+  });
 
   const activeRounds = rounds.filter((item) => item.status === "active");
   const completedRounds = rounds.filter((item) => item.status === "completed");
@@ -109,7 +84,7 @@ export default async function TodayPage() {
             </div>
             <div>
               <div className="text-sm text-indigo-100">Daily Progress</div>
-              <h2 className="text-2xl font-bold tracking-tight">{uniqueWordsReviewedToday} Unique Words Reviewed</h2>
+              <h2 className="text-2xl font-bold tracking-tight">{activeRounds.length} Active Rounds</h2>
             </div>
           </div>
 
@@ -210,14 +185,14 @@ export default async function TodayPage() {
       </section>
 
       <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 sm:grid-cols-2">
-        <div>
+        <article>
           <div className="text-xs uppercase tracking-wide text-slate-500">Active rounds</div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{activeRounds.length}</div>
-        </div>
-        <div>
+        </article>
+        <article>
           <div className="text-xs uppercase tracking-wide text-slate-500">Completed rounds</div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{completedRounds.length}</div>
-        </div>
+        </article>
       </section>
     </div>
   );

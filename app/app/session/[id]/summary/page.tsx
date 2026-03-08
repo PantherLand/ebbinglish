@@ -3,6 +3,7 @@ import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
 import { parseSessionResults } from "@/src/study-model";
 import { hasStudyPrismaModels, STUDY_PRISMA_HINT } from "@/src/study-runtime";
+import StoryGenerator from "./story-generator";
 
 type SessionSummaryPageProps = {
   params: Promise<{ id: string }>;
@@ -71,6 +72,19 @@ export default async function SessionSummaryPage({ params }: SessionSummaryPageP
   const fuzzyCount = results.filter((item) => item.outcome === "fuzzy").length;
   const unknownCount = results.filter((item) => item.outcome === "unknown").length;
 
+  const practiceWordIds = results
+    .filter((item) => item.outcome === "fuzzy" || item.outcome === "unknown")
+    .map((item) => item.wordId);
+
+  const practiceWords =
+    practiceWordIds.length > 0
+      ? await prisma.word.findMany({
+          where: { id: { in: practiceWordIds } },
+          select: { text: true },
+        })
+      : [];
+  const practiceWordTexts = practiceWords.map((w) => w.text);
+
   return (
     <div className="mx-auto max-w-md px-4 py-12 text-center">
       <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-4xl text-emerald-600">
@@ -109,6 +123,10 @@ export default async function SessionSummaryPage({ params }: SessionSummaryPageP
           Back to Dashboard
         </Link>
       </div>
+
+      {practiceWordTexts.length > 0 ? (
+        <StoryGenerator words={practiceWordTexts} />
+      ) : null}
     </div>
   );
 }

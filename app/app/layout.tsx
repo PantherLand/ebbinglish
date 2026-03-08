@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import GlobalToastViewport from "@/app/components/global-toast-viewport";
 import AppShellNav from "@/app/components/app-shell-nav";
 import EbbinglishBrand from "@/app/components/ebbinglish-brand";
-import { auth, signOut } from "@/src/auth";
+import { auth } from "@/src/auth";
+import { prisma } from "@/src/prisma";
+import { hasStudyPrismaModels } from "@/src/study-runtime";
 
 export const metadata: Metadata = {
   robots: {
@@ -12,8 +14,54 @@ export const metadata: Metadata = {
   },
 };
 
+function getTodayRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await auth();
+  let sidebarDailyGoal: { reviewed: number; goal: number; progress: number } | null = null;
+
+  if (session?.user?.email && hasStudyPrismaModels()) {
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+
+    if (user) {
+      const { start, end } = getTodayRange();
+      const [reviewedTodayLogs, settings] = await Promise.all([
+        prisma.reviewLog.findMany({
+          where: {
+            userId: user.id,
+            reviewedAt: {
+              gte: start,
+              lt: end,
+            },
+          },
+          select: { wordId: true },
+        }),
+        prisma.studySettings.upsert({
+          where: { userId: user.id },
+          update: {},
+          create: { userId: user.id },
+          select: { dailyGoal: true },
+        }),
+      ]);
+
+      const reviewed = new Set(reviewedTodayLogs.map((item) => item.wordId)).size;
+      const goal = Math.max(settings.dailyGoal, 1);
+      sidebarDailyGoal = {
+        reviewed,
+        goal,
+        progress: Math.min(100, Math.round((reviewed / goal) * 100)),
+      };
+    }
+  }
 
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50 text-slate-900">
@@ -24,30 +72,22 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
         <AppShellNav />
 
-        <div className="mt-auto border-t border-slate-100 p-4">
-          {session?.user?.email ? (
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Signed in as</div>
-              <div className="mt-1 truncate text-sm font-medium text-slate-900">{session.user.email}</div>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut({ redirectTo: "/" });
-                }}
-                className="mt-3"
-              >
-                <button
-                  className="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                  type="submit"
-                >
-                  Sign out
-                </button>
-              </form>
+        {sidebarDailyGoal ? (
+          <div className="mt-auto border-t border-slate-100 p-4">
+            <div className="rounded-2xl bg-[#EEF2FF] px-3 py-4">
+              <div className="mt-1 text-sm font-bold text-indigo-900">Daily Goal</div>
+              <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-[#C7D2FE]">
+                <div
+                  className="h-full rounded-full bg-indigo-600 transition-all"
+                  style={{ width: `${sidebarDailyGoal.progress}%` }}
+                />
+              </div>
+              <div className="mt-3 text-sm text-indigo-600 tabular-nums">
+                {sidebarDailyGoal.reviewed}/{sidebarDailyGoal.goal} words reviewed
+              </div>
             </div>
-          ) : (
-            <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">Not signed in</div>
-          )}
-        </div>
+          </div>
+        ) : null}
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">

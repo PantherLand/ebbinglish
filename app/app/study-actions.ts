@@ -59,6 +59,7 @@ const saveSessionProgressSchema = z.object({
 
 const updateSettingsSchema = z.object({
   sessionSize: z.number().int().min(1).max(60).optional(),
+  dailyGoal: z.number().int().min(1).max(500).optional(),
   freezeRounds: z.number().int().min(1).max(20).optional(),
   autoPlayAudio: z.boolean().optional(),
   requireConsecutiveKnown: z.boolean().optional(),
@@ -994,6 +995,7 @@ export async function updateStudySettingsAction(
 
   const payload: Record<string, unknown> = {};
   if (typeof parsed.data.sessionSize === "number") payload.sessionSize = parsed.data.sessionSize;
+  if (typeof parsed.data.dailyGoal === "number") payload.dailyGoal = parsed.data.dailyGoal;
   if (typeof parsed.data.freezeRounds === "number") payload.freezeRounds = parsed.data.freezeRounds;
   if (typeof parsed.data.autoPlayAudio === "boolean") payload.autoPlayAudio = parsed.data.autoPlayAudio;
   if (typeof parsed.data.requireConsecutiveKnown === "boolean") {

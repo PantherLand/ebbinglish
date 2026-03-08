@@ -143,6 +143,7 @@ model StudySettings {
   id                     String  @id @default(cuid())
   userId                 String  @unique
   sessionSize            Int     @default(20)
+  dailyGoal              Int     @default(20)
   freezeRounds           Int     @default(3)
   autoPlayAudio          Boolean @default(true)
   requireConsecutiveKnown Boolean @default(true)

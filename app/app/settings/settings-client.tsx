@@ -5,6 +5,7 @@ import { updateStudySettingsAction } from "@/app/app/study-actions";
 
 type SettingsState = {
   sessionSize: number;
+  dailyGoal: number;
   freezeRounds: number;
   autoPlayAudio: boolean;
   requireConsecutiveKnown: boolean;
@@ -44,11 +45,6 @@ export default function SettingsClient({ initialSettings }: { initialSettings: S
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">Customize your learning experience.</p>
-      </header>
-
       <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="border-b border-slate-100 pb-2 text-lg font-bold text-slate-900">Session Settings</h2>
 
@@ -98,6 +94,21 @@ export default function SettingsClient({ initialSettings }: { initialSettings: S
             className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             onChange={(event) => commit({ requireConsecutiveKnown: event.target.checked })}
             type="checkbox"
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-medium text-slate-900">Daily Goal</p>
+            <p className="text-sm text-slate-500">How many unique words you want to review each day</p>
+          </div>
+          <input
+            className="w-24 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-center text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            max={500}
+            min={1}
+            onChange={(event) => commit({ dailyGoal: Number(event.target.value) })}
+            type="number"
+            value={settings.dailyGoal}
           />
         </div>
 
