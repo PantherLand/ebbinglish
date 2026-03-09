@@ -6,14 +6,16 @@ enum APIError: LocalizedError {
     case serverError(Int, String?)
     case decodingError(Error)
     case invalidURL
+    case noToken
 
     var errorDescription: String? {
         switch self {
-        case .unauthorized: return "Please sign in again"
+        case .unauthorized: return "Invalid API token. Please check your token in Settings."
         case .networkError(let error): return error.localizedDescription
         case .serverError(let code, let msg): return msg ?? "Server error (\(code))"
         case .decodingError(let error): return "Data error: \(error.localizedDescription)"
         case .invalidURL: return "Invalid URL"
+        case .noToken: return "No API token configured. Go to Settings to add your token."
         }
     }
 }
@@ -21,7 +23,7 @@ enum APIError: LocalizedError {
 class APIClient {
     static let shared = APIClient()
 
-    private var baseURL: String {
+    var baseURL: String {
         UserDefaults.standard.string(forKey: "serverURL") ?? "https://ebbinglish.app"
     }
 
@@ -34,11 +36,9 @@ class APIClient {
         d.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let str = try container.decode(String.self)
-            // Try ISO8601 with fractional seconds
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             if let date = formatter.date(from: str) { return date }
-            // Try without fractional seconds
             formatter.formatOptions = [.withInternetDateTime]
             if let date = formatter.date(from: str) { return date }
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(str)")
@@ -58,6 +58,10 @@ class APIClient {
         body: Encodable? = nil,
         queryItems: [URLQueryItem]? = nil
     ) async throws -> T {
+        guard let token = authToken else {
+            throw APIError.noToken
+        }
+
         guard var components = URLComponents(string: baseURL + path) else {
             throw APIError.invalidURL
         }
@@ -67,10 +71,7 @@ class APIClient {
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        if let token = authToken {
-            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         if let body {
             req.httpBody = try encoder.encode(body)
@@ -103,20 +104,22 @@ class APIClient {
         }
     }
 
-    // MARK: - Auth
+    // MARK: - Profile
 
-    struct LoginRequest: Encodable {
-        let email: String
-        let password: String
+    func fetchProfile() async throws -> UserProfile {
+        try await request(method: "GET", path: "/api/mobile/profile")
     }
 
-    struct AuthResponse: Decodable {
-        let token: String
-        let user: UserProfile
+    // MARK: - Today
+
+    struct TodayResponse: Decodable {
+        let wordsReviewedToday: Int
+        let activeRound: StudyRound?
+        let recentRounds: [StudyRound]
     }
 
-    func login(email: String, password: String) async throws -> AuthResponse {
-        try await request(method: "POST", path: "/api/auth/login", body: LoginRequest(email: email, password: password))
+    func fetchToday() async throws -> TodayResponse {
+        try await request(method: "GET", path: "/api/mobile/today")
     }
 
     // MARK: - Words / Library
@@ -139,7 +142,7 @@ class APIClient {
         if let status, status != "all" {
             items.append(URLQueryItem(name: "status", value: status))
         }
-        return try await request(method: "GET", path: "/api/library", queryItems: items)
+        return try await request(method: "GET", path: "/api/mobile/library", queryItems: items)
     }
 
     struct CreateWordRequest: Encodable {
@@ -153,26 +156,26 @@ class APIClient {
     }
 
     func createWord(text: String, language: String = "en", note: String? = nil) async throws -> CreateWordResponse {
-        try await request(method: "POST", path: "/api/library/words", body: CreateWordRequest(text: text, language: language, note: note))
+        try await request(method: "POST", path: "/api/mobile/library/words", body: CreateWordRequest(text: text, language: language, note: note))
     }
 
     func deleteWord(wordId: String) async throws -> EmptyResponse {
-        try await request(method: "DELETE", path: "/api/library/words/\(wordId)")
+        try await request(method: "DELETE", path: "/api/mobile/library/words/\(wordId)")
     }
 
     func togglePriority(wordId: String, isPriority: Bool) async throws -> EmptyResponse {
-        try await request(method: "PATCH", path: "/api/library/words/\(wordId)", body: ["isPriority": isPriority])
+        try await request(method: "PATCH", path: "/api/mobile/library/words/\(wordId)", body: ["isPriority": isPriority])
     }
 
     func fetchWordDetail(wordId: String) async throws -> Word {
-        try await request(method: "GET", path: "/api/library/words/\(wordId)")
+        try await request(method: "GET", path: "/api/mobile/library/words/\(wordId)")
     }
 
     func fetchWordLogs(wordId: String) async throws -> [ReviewLog] {
-        try await request(method: "GET", path: "/api/library/words/\(wordId)/logs")
+        try await request(method: "GET", path: "/api/mobile/library/words/\(wordId)/logs")
     }
 
-    // MARK: - Dictionary
+    // MARK: - Dictionary (uses existing public API, no /mobile prefix)
 
     struct DictMeaningResponse: Decodable {
         let entry: DictionaryEntry?
@@ -192,7 +195,7 @@ class APIClient {
     }
 
     func fetchRounds() async throws -> RoundsResponse {
-        try await request(method: "GET", path: "/api/rounds")
+        try await request(method: "GET", path: "/api/mobile/rounds")
     }
 
     struct CreateRoundRequest: Encodable {
@@ -205,19 +208,19 @@ class APIClient {
     }
 
     func createRound(name: String, wordIds: [String]) async throws -> CreateRoundResponse {
-        try await request(method: "POST", path: "/api/rounds", body: CreateRoundRequest(name: name, wordIds: wordIds))
+        try await request(method: "POST", path: "/api/mobile/rounds", body: CreateRoundRequest(name: name, wordIds: wordIds))
     }
 
     func fetchRoundDetail(roundId: String) async throws -> StudyRound {
-        try await request(method: "GET", path: "/api/rounds/\(roundId)")
+        try await request(method: "GET", path: "/api/mobile/rounds/\(roundId)")
     }
 
     func deleteRound(roundId: String) async throws -> EmptyResponse {
-        try await request(method: "DELETE", path: "/api/rounds/\(roundId)")
+        try await request(method: "DELETE", path: "/api/mobile/rounds/\(roundId)")
     }
 
     func updateRoundStatus(roundId: String, status: String) async throws -> EmptyResponse {
-        try await request(method: "PATCH", path: "/api/rounds/\(roundId)", body: ["status": status])
+        try await request(method: "PATCH", path: "/api/mobile/rounds/\(roundId)", body: ["status": status])
     }
 
     // MARK: - Sessions
@@ -233,13 +236,13 @@ class APIClient {
     }
 
     func startSession(roundId: String, type: SessionType, count: Int? = nil) async throws -> StartSessionResponse {
-        try await request(method: "POST", path: "/api/sessions", body: StartSessionRequest(
+        try await request(method: "POST", path: "/api/mobile/sessions", body: StartSessionRequest(
             roundId: roundId, type: type.rawValue, count: count
         ))
     }
 
     func fetchSession(sessionId: String) async throws -> StudySession {
-        try await request(method: "GET", path: "/api/sessions/\(sessionId)")
+        try await request(method: "GET", path: "/api/mobile/sessions/\(sessionId)")
     }
 
     struct SaveProgressRequest: Encodable {
@@ -247,7 +250,7 @@ class APIClient {
     }
 
     func saveSessionProgress(sessionId: String, results: [SessionResult]) async throws -> EmptyResponse {
-        try await request(method: "PATCH", path: "/api/sessions/\(sessionId)/progress", body: SaveProgressRequest(results: results))
+        try await request(method: "PATCH", path: "/api/mobile/sessions/\(sessionId)/progress", body: SaveProgressRequest(results: results))
     }
 
     struct FinishSessionRequest: Encodable {
@@ -265,19 +268,19 @@ class APIClient {
     }
 
     func finishSession(sessionId: String, results: [SessionResult]) async throws -> FinishSessionResponse {
-        try await request(method: "POST", path: "/api/sessions/\(sessionId)/finish", body: FinishSessionRequest(results: results))
+        try await request(method: "POST", path: "/api/mobile/sessions/\(sessionId)/finish", body: FinishSessionRequest(results: results))
     }
 
     // MARK: - Stats
 
     func fetchStats() async throws -> StatsOverview {
-        try await request(method: "GET", path: "/api/stats")
+        try await request(method: "GET", path: "/api/mobile/stats")
     }
 
     // MARK: - Settings
 
     func fetchSettings() async throws -> StudySettings {
-        try await request(method: "GET", path: "/api/settings")
+        try await request(method: "GET", path: "/api/mobile/settings")
     }
 
     struct UpdateSettingsRequest: Encodable {
@@ -288,31 +291,11 @@ class APIClient {
     }
 
     func updateSettings(_ settings: UpdateSettingsRequest) async throws -> StudySettings {
-        try await request(method: "PATCH", path: "/api/settings", body: settings)
-    }
-
-    func fetchProfile() async throws -> UserProfile {
-        try await request(method: "GET", path: "/api/profile")
-    }
-
-    // MARK: - Today
-
-    struct TodayResponse: Decodable {
-        let wordsReviewedToday: Int
-        let activeRound: StudyRound?
-        let recentRounds: [StudyRound]
-    }
-
-    func fetchToday() async throws -> TodayResponse {
-        try await request(method: "GET", path: "/api/today")
-    }
-
-    func signOut() async throws -> EmptyResponse {
-        try await request(method: "POST", path: "/api/auth/signout")
+        try await request(method: "PATCH", path: "/api/mobile/settings", body: settings)
     }
 
     func resetProgress() async throws -> EmptyResponse {
-        try await request(method: "POST", path: "/api/settings/reset")
+        try await request(method: "POST", path: "/api/mobile/settings/reset")
     }
 }
 

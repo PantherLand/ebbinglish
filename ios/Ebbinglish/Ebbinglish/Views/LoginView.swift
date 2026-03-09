@@ -2,8 +2,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var authManager: AuthManager
-    @State private var email = ""
-    @State private var password = ""
+    @State private var apiToken = ""
     @State private var serverURL = "https://ebbinglish.app"
     @State private var showServerConfig = false
 
@@ -34,17 +33,22 @@ struct LoginView: View {
 
             Spacer()
 
-            // Login Form
+            // Token Auth Form
             VStack(spacing: 14) {
-                TextField("Email", text: $email)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("API Token")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text("Generate a token from your web account:\nSettings > API Token > Generate")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                TextField("ebl_...", text: $apiToken)
                     .textFieldStyle(.roundedBorder)
-                    .textContentType(.emailAddress)
                     .autocapitalization(.none)
                     .autocorrectionDisabled()
-
-                SecureField("Password", text: $password)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.password)
+                    .font(.system(.body, design: .monospaced))
 
                 if let error = authManager.errorMessage {
                     Text(error)
@@ -55,13 +59,13 @@ struct LoginView: View {
 
                 Button(action: {
                     UserDefaults.standard.set(serverURL, forKey: "serverURL")
-                    Task { await authManager.login(email: email, password: password) }
+                    Task { await authManager.loginWithToken(apiToken) }
                 }) {
                     if authManager.isLoading {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Text("Sign In")
+                        Text("Connect")
                             .fontWeight(.semibold)
                     }
                 }
@@ -70,7 +74,7 @@ struct LoginView: View {
                 .background(Color.blue)
                 .foregroundColor(.white)
                 .cornerRadius(12)
-                .disabled(email.isEmpty || password.isEmpty || authManager.isLoading)
+                .disabled(apiToken.trimmingCharacters(in: .whitespaces).isEmpty || authManager.isLoading)
             }
             .padding(.horizontal, 24)
 

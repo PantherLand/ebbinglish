@@ -1,5 +1,4 @@
 import Foundation
-import AuthenticationServices
 
 @MainActor
 class AuthManager: ObservableObject {
@@ -17,17 +16,29 @@ class AuthManager: ObservableObject {
         }
     }
 
-    func login(email: String, password: String) async {
+    /// Authenticate using an API token (generated from web Settings page)
+    func loginWithToken(_ token: String) async {
         isLoading = true
         errorMessage = nil
+
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            errorMessage = "Token cannot be empty"
+            isLoading = false
+            return
+        }
+
+        KeychainService.shared.saveToken(trimmed)
+
+        // Verify token by fetching profile
         do {
-            let response = try await APIClient.shared.login(email: email, password: password)
-            KeychainService.shared.saveToken(response.token)
-            currentUser = response.user
+            currentUser = try await APIClient.shared.fetchProfile()
             isAuthenticated = true
         } catch {
-            errorMessage = error.localizedDescription
+            KeychainService.shared.deleteToken()
+            errorMessage = "Invalid API token. Generate a new one from the web Settings page."
         }
+
         isLoading = false
     }
 
@@ -35,16 +46,12 @@ class AuthManager: ObservableObject {
         KeychainService.shared.deleteToken()
         currentUser = nil
         isAuthenticated = false
-        Task {
-            try? await APIClient.shared.signOut()
-        }
     }
 
     private func loadProfile() async {
         do {
             currentUser = try await APIClient.shared.fetchProfile()
         } catch {
-            // Token may be invalid
             if case APIError.unauthorized = error {
                 signOut()
             }
