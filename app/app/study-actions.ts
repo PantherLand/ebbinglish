@@ -787,28 +787,22 @@ export async function finishSessionAction(
       }
 
       const settings = await ensureStudySettingsTx(tx, userId);
-      const [reviewStates, roundReviewStates] = await Promise.all([
-        tx.reviewState.findMany({
-          where: {
-            userId,
-            wordId: { in: session.wordIds },
-          },
-        }),
-        tx.reviewState.findMany({
-          where: {
-            userId,
-            wordId: { in: round.wordIds },
-          },
-          select: {
-            wordId: true,
-            seenCount: true,
-          },
-        }),
-      ]);
-      const stateMap = new Map(reviewStates.map((item) => [item.wordId, item]));
+      const roundStates = await tx.reviewState.findMany({
+        where: {
+          userId,
+          wordId: { in: round.wordIds },
+        },
+        select: {
+          wordId: true,
+          seenCount: true,
+          consecutivePerfect: true,
+        },
+      });
+
+      const roundStateMap = new Map(roundStates.map((item) => [item.wordId, item]));
       const roundWordIdSet = new Set(round.wordIds);
       const reviewedRoundWordSet = new Set(
-        roundReviewStates.filter((item) => item.seenCount > 0).map((item) => item.wordId),
+        roundStates.filter((item) => item.seenCount > 0).map((item) => item.wordId),
       );
       const attempted = new Set(
         round.attemptedWordIds.filter(
@@ -817,6 +811,32 @@ export async function finishSessionAction(
       );
       const completed = new Set(round.completedWordIds);
       const firstTryKnown = new Set(round.firstTryKnownWordIds);
+      const reviewLogRows = [] as Array<{
+        userId: string;
+        wordId: string;
+        grade: number;
+        revealedAnswer: boolean;
+        reviewedAt: Date;
+      }>;
+      const newReviewStateRows = [] as Array<{
+        userId: string;
+        wordId: string;
+        lastReviewedAt: Date;
+        seenCount: number;
+        lapseCount: number;
+        latestFirstTryGrade: number | null;
+        consecutivePerfect: number;
+        freezeRounds: number;
+        isMastered: boolean;
+        masteryPhase: number;
+      }>;
+      const existingStateWordIds: string[] = [];
+      const existingUnknownWordIds: string[] = [];
+      const existingFirstTryGradeWordIds = {
+        0: [] as string[],
+        1: [] as string[],
+        2: [] as string[],
+      };
 
       for (const wordId of session.wordIds) {
         const outcome = resultByWordId.get(wordId)?.outcome;
@@ -838,47 +858,89 @@ export async function finishSessionAction(
           }
         }
 
-        await tx.reviewLog.create({
-          data: {
-            userId,
-            wordId,
-            grade,
-            revealedAnswer: true,
-            reviewedAt: now,
-          },
+        reviewLogRows.push({
+          userId,
+          wordId,
+          grade,
+          revealedAnswer: true,
+          reviewedAt: now,
         });
 
-        const state = stateMap.get(wordId);
+        const state = roundStateMap.get(wordId);
         if (!state) {
-          const created = await tx.reviewState.create({
-            data: {
-              userId,
-              wordId,
-              lastReviewedAt: now,
-              seenCount: 1,
-              lapseCount: grade === 0 ? 1 : 0,
-              latestFirstTryGrade: isFirstAttempt ? grade : null,
-              consecutivePerfect: 0,
-              freezeRounds: 0,
-              isMastered: false,
-              masteryPhase: 0,
-            },
+          newReviewStateRows.push({
+            userId,
+            wordId,
+            lastReviewedAt: now,
+            seenCount: 1,
+            lapseCount: grade === 0 ? 1 : 0,
+            latestFirstTryGrade: isFirstAttempt ? grade : null,
+            consecutivePerfect: 0,
+            freezeRounds: 0,
+            isMastered: false,
+            masteryPhase: 0,
           });
-          stateMap.set(wordId, created);
         } else {
-          const updated = await tx.reviewState.update({
-            where: {
-              wordId,
-            },
-            data: {
-              lastReviewedAt: now,
-              seenCount: { increment: 1 },
-              lapseCount: grade === 0 ? { increment: 1 } : undefined,
-              latestFirstTryGrade: isFirstAttempt ? grade : undefined,
-            },
-          });
-          stateMap.set(wordId, updated);
+          existingStateWordIds.push(wordId);
+          if (grade === 0) {
+            existingUnknownWordIds.push(wordId);
+          }
+          if (isFirstAttempt) {
+            existingFirstTryGradeWordIds[grade as 0 | 1 | 2].push(wordId);
+          }
         }
+      }
+
+      if (reviewLogRows.length > 0) {
+        await tx.reviewLog.createMany({
+          data: reviewLogRows,
+        });
+      }
+
+      if (existingStateWordIds.length > 0) {
+        await tx.reviewState.updateMany({
+          where: {
+            userId,
+            wordId: { in: existingStateWordIds },
+          },
+          data: {
+            lastReviewedAt: now,
+            seenCount: { increment: 1 },
+          },
+        });
+      }
+
+      if (existingUnknownWordIds.length > 0) {
+        await tx.reviewState.updateMany({
+          where: {
+            userId,
+            wordId: { in: existingUnknownWordIds },
+          },
+          data: {
+            lapseCount: { increment: 1 },
+          },
+        });
+      }
+
+      for (const [gradeKey, wordIds] of Object.entries(existingFirstTryGradeWordIds)) {
+        if (wordIds.length === 0) {
+          continue;
+        }
+        await tx.reviewState.updateMany({
+          where: {
+            userId,
+            wordId: { in: wordIds },
+          },
+          data: {
+            latestFirstTryGrade: Number(gradeKey),
+          },
+        });
+      }
+
+      if (newReviewStateRows.length > 0) {
+        await tx.reviewState.createMany({
+          data: newReviewStateRows,
+        });
       }
 
       const nextRoundPatch = {
@@ -900,44 +962,59 @@ export async function finishSessionAction(
           },
         });
 
-        const roundStates = await tx.reviewState.findMany({
-          where: {
-            userId,
-            wordId: { in: round.wordIds },
-          },
-          select: {
-            wordId: true,
-            consecutivePerfect: true,
-          },
-        });
-        const roundStateMap = new Map(roundStates.map((item) => [item.wordId, item]));
+        const notFirstTryWordIds = round.wordIds.filter((wordId) => !firstTryKnown.has(wordId));
+        if (notFirstTryWordIds.length > 0) {
+          await tx.reviewState.updateMany({
+            where: {
+              userId,
+              wordId: { in: notFirstTryWordIds },
+            },
+            data: {
+              consecutivePerfect: 0,
+              isMastered: false,
+              freezeRounds: 0,
+            },
+          });
+        }
 
+        const firstTryBuckets = new Map<
+          string,
+          { wordIds: string[]; nextConsecutive: number; shouldMaster: boolean }
+        >();
         for (const wordId of round.wordIds) {
-          const current = roundStateMap.get(wordId);
-          const prevConsecutive = current?.consecutivePerfect ?? 0;
-          const firstTry = firstTryKnown.has(wordId);
-
-          if (firstTry) {
-            const nextConsecutive = prevConsecutive + 1;
-            const shouldMaster = settings.requireConsecutiveKnown ? nextConsecutive >= 2 : true;
-            await tx.reviewState.update({
-              where: { wordId },
-              data: {
-                consecutivePerfect: nextConsecutive,
-                isMastered: shouldMaster,
-                freezeRounds: shouldMaster ? settings.freezeRounds : 0,
-              },
-            });
-          } else {
-            await tx.reviewState.update({
-              where: { wordId },
-              data: {
-                consecutivePerfect: 0,
-                isMastered: false,
-                freezeRounds: 0,
-              },
-            });
+          if (!firstTryKnown.has(wordId)) {
+            continue;
           }
+
+          const prevConsecutive = roundStateMap.get(wordId)?.consecutivePerfect ?? 0;
+          const nextConsecutive = prevConsecutive + 1;
+          const shouldMaster = settings.requireConsecutiveKnown ? nextConsecutive >= 2 : true;
+          const bucketKey = `${nextConsecutive}:${shouldMaster ? "master" : "keep"}`;
+          const existingBucket = firstTryBuckets.get(bucketKey);
+          if (existingBucket) {
+            existingBucket.wordIds.push(wordId);
+            continue;
+          }
+
+          firstTryBuckets.set(bucketKey, {
+            wordIds: [wordId],
+            nextConsecutive,
+            shouldMaster,
+          });
+        }
+
+        for (const bucket of firstTryBuckets.values()) {
+          await tx.reviewState.updateMany({
+            where: {
+              userId,
+              wordId: { in: bucket.wordIds },
+            },
+            data: {
+              consecutivePerfect: bucket.nextConsecutive,
+              isMastered: bucket.shouldMaster,
+              freezeRounds: bucket.shouldMaster ? settings.freezeRounds : 0,
+            },
+          });
         }
       }
 
@@ -960,6 +1037,9 @@ export async function finishSessionAction(
       return {
         roundId: round.id,
       };
+    }, {
+      maxWait: 10_000,
+      timeout: 20_000,
     });
 
     revalidatePath("/app/today");

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import GlobalToastViewport from "@/app/components/global-toast-viewport";
 import AppShellNav from "@/app/components/app-shell-nav";
 import EbbinglishBrand from "@/app/components/ebbinglish-brand";
@@ -23,6 +24,9 @@ function getTodayRange() {
 }
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  const headerStore = await headers();
+  const userAgent = headerStore.get("user-agent") ?? "";
+  const isEmbeddedIOS = userAgent.includes("EbbinglishIOS");
   const session = await auth();
   let sidebarDailyGoal: { reviewed: number; goal: number; progress: number } | null = null;
 
@@ -64,43 +68,59 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50 text-slate-900">
-      <aside className="hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white md:flex">
-        <div className="border-b border-slate-100 px-6 py-5">
-          <EbbinglishBrand sidebar />
-        </div>
+    <div
+      className={`flex text-slate-900 ${
+        isEmbeddedIOS ? "min-h-dvh bg-slate-100" : "h-dvh overflow-hidden bg-slate-50"
+      }`}
+    >
+      {!isEmbeddedIOS ? (
+        <aside className="hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white md:flex">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <EbbinglishBrand sidebar />
+          </div>
 
-        <AppShellNav />
+          <AppShellNav />
 
-        {sidebarDailyGoal ? (
-          <div className="mt-auto border-t border-slate-100 p-4">
-            <div className="rounded-2xl bg-[#EEF2FF] px-3 py-4">
-              <div className="mt-1 text-sm font-bold text-indigo-900">Daily Goal</div>
-              <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-[#C7D2FE]">
-                <div
-                  className="h-full rounded-full bg-indigo-600 transition-all"
-                  style={{ width: `${sidebarDailyGoal.progress}%` }}
-                />
-              </div>
-              <div className="mt-3 text-sm text-indigo-600 tabular-nums">
-                {sidebarDailyGoal.reviewed}/{sidebarDailyGoal.goal} words reviewed
+          {sidebarDailyGoal ? (
+            <div className="mt-auto border-t border-slate-100 p-4">
+              <div className="rounded-2xl bg-[#EEF2FF] px-3 py-4">
+                <div className="mt-1 text-sm font-bold text-indigo-900">Daily Goal</div>
+                <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-[#C7D2FE]">
+                  <div
+                    className="h-full rounded-full bg-indigo-600 transition-all"
+                    style={{ width: `${sidebarDailyGoal.progress}%` }}
+                  />
+                </div>
+                <div className="mt-3 text-sm text-indigo-600 tabular-nums">
+                  {sidebarDailyGoal.reviewed}/{sidebarDailyGoal.goal} words reviewed
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
-      </aside>
+          ) : null}
+        </aside>
+      ) : null}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:hidden">
-          <EbbinglishBrand compact />
-        </header>
+        {!isEmbeddedIOS ? (
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:hidden">
+            <EbbinglishBrand compact />
+          </header>
+        ) : null}
 
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-5xl px-20 py-4 pb-20 md:px-8 md:py-8 md:pb-8">{children}</div>
+          <div
+            className={`mx-auto w-full ${
+              isEmbeddedIOS
+                ? "max-w-5xl px-4 py-5 pb-6 sm:px-6 md:px-8 md:py-8"
+                : "max-w-5xl px-4 py-5 pb-24 sm:px-6 md:px-8 md:py-8 md:pb-8"
+            }`}
+          >
+            {children}
+          </div>
         </main>
       </div>
 
-      <AppShellNav mobile />
+      {!isEmbeddedIOS ? <AppShellNav mobile /> : null}
       <GlobalToastViewport />
     </div>
   );
