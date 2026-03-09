@@ -3,6 +3,7 @@ import { prisma } from "@/src/prisma";
 import { loadWordsWithStatus } from "@/src/study-queries";
 import { hasStudyPrismaModels } from "@/src/study-runtime";
 import { parseSessionResults } from "@/src/study-model";
+import HeatmapGrid from "./heatmap-grid";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -41,6 +42,47 @@ function buildDailySeries(start: Date, end: Date, counts: Map<string, number>) {
   return out;
 }
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function buildHeatmapWeeks(todayStart: Date, counts: Map<string, number>) {
+  const rawStart = addDays(todayStart, -364);
+  const sunday = new Date(rawStart);
+  sunday.setDate(sunday.getDate() - sunday.getDay());
+
+  const weeks: Array<{
+    days: Array<{ date: string; key: string; count: number; active: boolean }>;
+    monthLabel: string | null;
+  }> = [];
+
+  const cursor = new Date(sunday);
+  let lastMonth = -1;
+
+  while (cursor <= todayStart) {
+    const days = [];
+    let monthLabel: string | null = null;
+
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(cursor);
+      date.setDate(date.getDate() + d);
+      const active = date >= rawStart && date <= todayStart;
+      const key = dayKey(date);
+
+      if (d === 0 && active && date.getMonth() !== lastMonth) {
+        monthLabel = MONTH_NAMES[date.getMonth()];
+        lastMonth = date.getMonth();
+      }
+
+      days.push({ date: date.toISOString(), key, count: counts.get(key) ?? 0, active });
+    }
+
+    weeks.push({ days, monthLabel });
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  return weeks;
+}
+
+
 export default async function StatsPage() {
   const session = await auth();
   const email = session?.user?.email;
@@ -71,6 +113,7 @@ export default async function StatsPage() {
   const now = new Date();
   const todayStart = startOfDay(now);
   const start7 = addDays(todayStart, -6);
+  const start365 = addDays(todayStart, -364);
 
   const wordsWithStatus = await loadWordsWithStatus(user.id);
   const totalWords = wordsWithStatus.length;
@@ -90,20 +133,24 @@ export default async function StatsPage() {
 
   const dayWordCountMap = new Map<string, number>();
   let totalSessions = 0;
+  const heatmapCounts = new Map<string, number>();
+  let dailyGoal = 20;
 
   if (hasStudyPrismaModels()) {
-    const [sessionsCount, sessions7] = await Promise.all([
+    const [sessionsCount, sessions7, heatmapLogs, studySettings] = await Promise.all([
       prisma.studySession.count({ where: { userId: user.id } }),
       prisma.studySession.findMany({
-        where: {
-          userId: user.id,
-          startedAt: { gte: start7 },
-        },
-        select: {
-          startedAt: true,
-          results: true,
-        },
+        where: { userId: user.id, startedAt: { gte: start7 } },
+        select: { startedAt: true, results: true },
         orderBy: { startedAt: "asc" },
+      }),
+      prisma.reviewLog.findMany({
+        where: { userId: user.id, reviewedAt: { gte: start365 } },
+        select: { reviewedAt: true, wordId: true },
+      }),
+      prisma.studySettings.findUnique({
+        where: { userId: user.id },
+        select: { dailyGoal: true },
       }),
     ]);
 
@@ -113,15 +160,23 @@ export default async function StatsPage() {
       const count = parseSessionResults(item.results).length;
       dayWordCountMap.set(key, (dayWordCountMap.get(key) ?? 0) + count);
     }
+
+    dailyGoal = studySettings?.dailyGoal ?? 20;
+
+    const dayWordSets = new Map<string, Set<string>>();
+    for (const log of heatmapLogs) {
+      const key = dayKey(log.reviewedAt);
+      if (!dayWordSets.has(key)) dayWordSets.set(key, new Set());
+      dayWordSets.get(key)!.add(log.wordId);
+    }
+    for (const [key, set] of dayWordSets) {
+      heatmapCounts.set(key, set.size);
+    }
   } else {
     const logs7 = await prisma.reviewLog.findMany({
-      where: {
-        userId: user.id,
-        reviewedAt: { gte: start7 },
-      },
+      where: { userId: user.id, reviewedAt: { gte: start7 } },
       select: { reviewedAt: true },
     });
-
     for (const item of logs7) {
       const key = dayKey(item.reviewedAt);
       dayWordCountMap.set(key, (dayWordCountMap.get(key) ?? 0) + 1);
@@ -130,6 +185,7 @@ export default async function StatsPage() {
 
   const sessionData = buildDailySeries(start7, todayStart, dayWordCountMap);
   const maxWords = Math.max(...sessionData.map((item) => item.words), 1);
+  const heatmapWeeks = buildHeatmapWeeks(todayStart, heatmapCounts);
 
   const donutStops =
     pieData.length === 0
@@ -157,15 +213,15 @@ export default async function StatsPage() {
         <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="mb-6 text-base font-bold text-gray-900">Word Mastery Distribution</h2>
           {pieData.length === 0 ? (
-            <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-500">
+            <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-gray-200 text-sm text-gray-500">
               No words yet
             </div>
           ) : (
             <>
-              <div className="flex h-64 items-center justify-center">
+              <div className="flex h-44 items-center justify-center">
                 <div
                   aria-label="Word status distribution"
-                  className="relative h-44 w-44 rounded-full"
+                  className="relative h-36 w-36 rounded-full"
                   style={{ background: `conic-gradient(${donutStops})` }}
                 >
                   <div className="absolute inset-8 rounded-full bg-white" />
@@ -194,7 +250,7 @@ export default async function StatsPage() {
                 return (
                   <div className="flex flex-col items-center gap-2" key={item.key}>
                     <div className="text-[11px] text-slate-500">{item.words}</div>
-                    <div className="flex h-40 w-full items-end justify-center">
+                    <div className="flex h-28 w-full items-end justify-center">
                       <div
                         className={`w-full max-w-10 rounded-t-md transition-all ${
                           item.words > 0 ? "bg-indigo-600" : "bg-slate-200"
@@ -214,6 +270,31 @@ export default async function StatsPage() {
         </article>
       </section>
 
+      {/* Heatmap */}
+      {hasStudyPrismaModels() && (
+        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-bold text-gray-900">Daily Review Activity</h2>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <span>Less</span>
+              <div className="h-3 w-3 rounded-sm border border-slate-200 bg-slate-100" />
+              <div className="h-3 w-3 rounded-sm bg-indigo-200" />
+              <div className="h-3 w-3 rounded-sm bg-indigo-500" />
+              <div className="h-3 w-3 rounded-sm bg-indigo-800" />
+              <span>More</span>
+            </div>
+          </div>
+
+          <div className="heatmap-container overflow-x-auto pb-1">
+            <HeatmapGrid weeks={heatmapWeeks} dailyGoal={dailyGoal} />
+          </div>
+
+          <p className="mt-3 text-[11px] text-slate-400">
+            Light purple &lt; {dailyGoal} words · Purple ≥ {dailyGoal} · Dark purple ≥ {dailyGoal * 2}
+          </p>
+        </section>
+      )}
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <article className="rounded-2xl border border-indigo-100 bg-indigo-50 p-6">
           <p className="text-sm font-medium uppercase text-indigo-600">Total Words</p>
@@ -229,6 +310,7 @@ export default async function StatsPage() {
           <h2 className="mt-2 text-4xl font-bold text-blue-900">{totalSessions}</h2>
         </article>
       </section>
+
     </div>
   );
 }
