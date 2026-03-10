@@ -165,7 +165,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Library</h1>
-          <p className="text-base text-slate-600">Manage your vocabulary collection.</p>
+          <p className="mt-1 hidden text-base text-slate-500 md:block">Manage your vocabulary collection.</p>
         </div>
         <AddWordModalTrigger />
       </div>

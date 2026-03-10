@@ -111,10 +111,17 @@ export default async function RoundsPage() {
       <header className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Your Rounds</h1>
-          <p className="mt-1 text-base text-slate-500">Manage your learning cycles.</p>
+          <p className="mt-1 hidden text-base text-slate-500 md:block">Manage your learning cycles.</p>
         </div>
         <Link
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-base font-medium text-white shadow-sm transition hover:bg-indigo-700"
+          className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-3 text-lg font-medium text-white shadow-[0_8px_18px_rgba(79,70,229,0.28)] transition hover:bg-indigo-700 md:hidden"
+          href="/app/rounds/new"
+        >
+          <span className="text-2xl leading-none">+</span>
+          <span>New Round</span>
+        </Link>
+        <Link
+          className="hidden items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-base font-medium text-white shadow-sm transition hover:bg-indigo-700 md:inline-flex"
           href="/app/rounds/new"
         >
           <span className="text-base leading-none">+</span>

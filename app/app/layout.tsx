@@ -15,6 +15,8 @@ export const metadata: Metadata = {
   },
 };
 
+const IOS_EMBEDDED_WEBVIEW_UA_TOKEN = "EbbinglishIOS-WKWebView";
+
 function getTodayRange() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -26,7 +28,7 @@ function getTodayRange() {
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const headerStore = await headers();
   const userAgent = headerStore.get("user-agent") ?? "";
-  const isEmbeddedIOS = userAgent.includes("EbbinglishIOS");
+  const isEmbeddedIOS = userAgent.includes(IOS_EMBEDDED_WEBVIEW_UA_TOKEN);
   const session = await auth();
   let sidebarDailyGoal: { reviewed: number; goal: number; progress: number } | null = null;
 

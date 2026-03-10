@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { authenticateApiToken, touchApiTokenLastUsed } from "@/src/api-token-auth";
 import { auth } from "@/src/auth";
 import { prisma } from "@/src/prisma";
 
@@ -11,25 +12,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ exists: false });
   }
 
-  const session = await auth();
-  const email = session?.user?.email;
+  const apiAuth = await authenticateApiToken(request);
+  let userId = apiAuth?.userId ?? null;
 
-  if (!email) {
-    return NextResponse.json({ exists: false }, { status: 401 });
-  }
+  if (!userId) {
+    const session = await auth();
+    const email = session?.user?.email;
 
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true },
-  });
+    if (!email) {
+      return NextResponse.json({ exists: false }, { status: 401 });
+    }
 
-  if (!user) {
-    return NextResponse.json({ exists: false }, { status: 404 });
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ exists: false }, { status: 404 });
+    }
+
+    userId = user.id;
+  } else {
+    touchApiTokenLastUsed(apiAuth!.tokenId).catch(() => {});
   }
 
   const found = await prisma.word.findFirst({
     where: {
-      userId: user.id,
+      userId,
       language,
       text: {
         equals: text,

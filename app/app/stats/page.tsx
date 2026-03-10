@@ -206,7 +206,7 @@ export default async function StatsPage() {
     <div className="space-y-8">
       <header>
         <h1 className="text-3xl font-bold text-gray-900">Statistics</h1>
-        <p className="mt-1 text-gray-500">Track your learning progress over time.</p>
+        <p className="mt-1 hidden text-base text-slate-500 md:block">Track your learning progress over time.</p>
       </header>
 
       <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
